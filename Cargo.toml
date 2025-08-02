@@ -1,0 +1,14 @@
+[package]
+name = "mrkle"
+version = "0.0.1"
+edition = "2024"
+
+[dependencies]
+crypto = { version = "0.5.1", features = ["digest"] }
+
+faster-hex = "0.10.0"
+thiserror = "2.0.12"
+
+[dev-dependencies]
+sha1 = "0.10.6"
+sha2 = "0.10.9"
