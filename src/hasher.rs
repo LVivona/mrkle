@@ -1,4 +1,4 @@
-use crypto::digest::Digest;
+use crypto::digest::{Digest, OutputSizeUser};
 
 /// A trait for cryptographic hashing operations with support for data concatenation.
 ///
@@ -57,7 +57,7 @@ pub trait Hasher {
     /// # Returns
     ///
     /// Returns the hash of the concatenated input hashes.
-    fn concat(&self, lhs: &Self::Output, rhs: &Self::Output) -> Self::Output;
+    fn concat(&self, lhs: impl AsRef<[u8]>, rhs: impl AsRef<[u8]>) -> Self::Output;
 
     /// Concatenates multiple hash outputs and returns the hash of the combined result.
     ///
@@ -71,7 +71,7 @@ pub trait Hasher {
     /// # Returns
     ///
     /// Returns the hash of all concatenated input hashes.
-    fn concat_slice(&self, data: &[Self::Output]) -> Self::Output;
+    fn concat_slice<T: AsRef<[u8]>>(&self, data: &[T]) -> Self::Output;
 }
 
 /// A generic hasher implementation that wraps cryptographic digest algorithms.
@@ -132,7 +132,8 @@ impl<D: Digest> MrkleHasher<D> {
 }
 
 impl<D: Digest> Hasher for MrkleHasher<D> {
-    type Output = Vec<u8>;
+    type Output =
+        crypto::common::generic_array::GenericArray<u8, <D as OutputSizeUser>::OutputSize>;
 
     /// Computes the hash using the underlying digest algorithm.
     ///
@@ -141,8 +142,7 @@ impl<D: Digest> Hasher for MrkleHasher<D> {
     /// This method uses the `D::digest` function to compute the hash and
     /// converts the result to a `Vec<u8>` for consistent output handling.
     fn hash(&self, data: impl AsRef<[u8]>) -> Self::Output {
-        let output = D::digest(data);
-        output.to_vec()
+        D::digest(data)
     }
 
     /// Concatenates two hashes and computes the hash of the result.
@@ -152,11 +152,12 @@ impl<D: Digest> Hasher for MrkleHasher<D> {
     /// Pre-allocates a vector with the exact capacity needed to avoid
     /// unnecessary reallocations during concatenation, then recursively
     /// calls `hash` on the combined data.
-    fn concat(&self, lhs: &Self::Output, rhs: &Self::Output) -> Self::Output {
-        let mut combined = Vec::with_capacity(lhs.len() + rhs.len());
-        combined.extend_from_slice(lhs);
-        combined.extend_from_slice(rhs);
-        self.hash(combined)
+    #[inline]
+    fn concat(&self, lhs: impl AsRef<[u8]>, rhs: impl AsRef<[u8]>) -> Self::Output {
+        let mut hasher = D::new();
+        hasher.update(lhs.as_ref());
+        hasher.update(rhs.as_ref());
+        hasher.finalize()
     }
 
     /// Concatenates multiple hashes and computes the hash of the result.
@@ -165,8 +166,13 @@ impl<D: Digest> Hasher for MrkleHasher<D> {
     ///
     /// Uses the `concat` method on the slice to efficiently join all hash
     /// values into a single vector, then computes the hash of the result.
-    fn concat_slice(&self, data: &[Self::Output]) -> Self::Output {
-        self.hash(data.concat())
+    #[inline]
+    fn concat_slice<T: AsRef<[u8]>>(&self, data: &[T]) -> Self::Output {
+        let mut hasher = D::new();
+        for ptr in data {
+            hasher.update(ptr);
+        }
+        hasher.finalize()
     }
 }
 
@@ -177,24 +183,42 @@ mod test {
 
     use super::MrkleHasher;
     use crypto::digest::Digest;
-    use sha1;
-    use sha2;
+    use sha1::Sha1;
+    use sha2::Sha256;
 
     #[test]
     fn test_sha1_hasher() {
-        let hasher = MrkleHasher::<sha1::Sha1>::new();
+        let hasher = MrkleHasher::<Sha1>::new();
         let output = hasher.hash("hello world");
 
-        let expected: Vec<u8> = sha1::Sha1::digest("hello world").to_vec();
+        let expected = sha1::Sha1::digest("hello world");
         assert_eq!(output, expected)
     }
 
     #[test]
     fn test_sha2_hasher() {
-        let hasher = MrkleHasher::<sha2::Sha256>::new();
+        let hasher = MrkleHasher::<Sha256>::new();
         let output = hasher.hash("hello world");
 
-        let expected: Vec<u8> = sha2::Sha256::digest("hello world").to_vec();
+        let expected = sha2::Sha256::digest("hello world");
+        assert_eq!(output, expected)
+    }
+
+    #[test]
+    fn test_sha2_hasher_concat() {
+        let hasher = MrkleHasher::<Sha256>::new();
+        let output = hasher.concat(&"hello", &"world");
+
+        let expected = sha2::Sha256::digest("helloworld");
+        assert_eq!(output, expected)
+    }
+
+    #[test]
+    fn test_sha2_hasher_twice() {
+        let hasher = MrkleHasher::<Sha256>::new();
+        let output = hasher.hash("hello world");
+
+        let expected = hasher.hash("hello world");
         assert_eq!(output, expected)
     }
 }
