@@ -1,7 +1,8 @@
 [package]
 name = "mrkle"
-version = "0.0.1"
+version = "0.0.1-rc"
 edition = "2024"
+description = "f"
 
 [dependencies]
 crypto = { version = "0.5.1", features = ["digest"] }
