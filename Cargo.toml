@@ -1,8 +1,12 @@
 [package]
 name = "mrkle"
-version = "0.0.1-rc"
+version = "0.0.1-rc-0"
 edition = "2024"
-description = "f"
+description = "A simple and performant Merkle Tree implementation in Rust, with support for building trees and verifying inclusion proofs."
+license = "MIT OR Apache-2.0"
+readme = "README.md"
+repository = "https://github.com/LVivona/mrkle"
+keywords = ["hash", "merkle", "proof", "tree"]
 
 [dependencies]
 crypto = { version = "0.5.1", features = ["digest"] }

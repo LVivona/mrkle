@@ -110,7 +110,7 @@ checksum = "1171693293099992e19cddea4e8b849964e9846f4acee11b3948bcc337be8776"
 
 [[package]]
 name = "mrkle"
-version = "0.0.1-rc"
+version = "0.0.1-rc-0"
 dependencies = [
  "crypto",
  "faster-hex",
