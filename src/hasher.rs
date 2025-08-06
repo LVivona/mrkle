@@ -72,6 +72,16 @@ pub trait Hasher {
     ///
     /// Returns the hash of all concatenated input hashes.
     fn concat_slice<T: AsRef<[u8]>>(&self, data: &[T]) -> Self::Output;
+
+    /// Certificate Transparency leaf node hashes, a 0x00 byte is prepended to the hash data,
+    /// while 0x01 is prepended when computing internal node hashes.
+    ///
+    /// # Returns
+    ///
+    /// The certificate appended depedning on if the leaf or parent.
+    fn certificate(&self, leaf: bool) -> u8 {
+        if leaf { 0x00 } else { 0x01 }
+    }
 }
 
 /// A generic hasher implementation that wraps cryptographic digest algorithms.
@@ -105,6 +115,12 @@ pub struct MrkleHasher<D: Digest> {
     /// Phantom data to maintain the generic parameter `D` without storing it.
     /// This allows the struct to be zero-sized while preserving type information.
     _phantom: std::marker::PhantomData<D>,
+}
+
+impl<D: Digest> Default for MrkleHasher<D> {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl<D: Digest> MrkleHasher<D> {
@@ -207,7 +223,7 @@ mod test {
     #[test]
     fn test_sha2_hasher_concat() {
         let hasher = MrkleHasher::<Sha256>::new();
-        let output = hasher.concat(&"hello", &"world");
+        let output = hasher.concat("hello", "world");
 
         let expected = sha2::Sha256::digest("helloworld");
         assert_eq!(output, expected)
@@ -220,5 +236,22 @@ mod test {
 
         let expected = hasher.hash("hello world");
         assert_eq!(output, expected)
+    }
+
+    #[test]
+    fn test_sha2_hasher_double_twice() {
+        let hasher = MrkleHasher::<Sha256>::new();
+        let output = hasher.hash(hasher.hash("hello world"));
+
+        let expected = sha2::Sha256::digest(sha2::Sha256::digest("hello world"));
+        assert_eq!(output, expected)
+    }
+
+    #[test]
+    fn test_generate_certificate() {
+        let hasher = MrkleHasher::<Sha256>::new();
+
+        assert!(hasher.certificate(true) == 0x00);
+        assert!(hasher.certificate(false) == 0x01)
     }
 }
