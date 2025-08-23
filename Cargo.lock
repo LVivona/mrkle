@@ -114,6 +114,7 @@ version = "0.0.1-rc-0"
 dependencies = [
  "crypto",
  "faster-hex",
+ "serde",
  "sha1",
  "sha2",
  "thiserror",
