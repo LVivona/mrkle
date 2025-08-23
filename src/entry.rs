@@ -1,13 +1,21 @@
-use crate::error::EntryError;
+use crate::error::{self, EntryError};
+use crate::{MrklEntry, prelude::*};
 
+/// Object that holds the bytes hashed `MrklEntry`
+/// used for reference of the array.
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
 #[repr(transparent)]
 #[allow(non_camel_case_types)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
 pub struct entry {
     bytes: [u8],
 }
 
 impl entry {
+    /// Try to convert bytes slice into entry object.
+    ///
+    /// Entry only supports sizes (16, 20, 28, 32, 48, or 64).
+    /// These are all the sizes of the sha type crypto algorithms
     #[inline]
     pub fn try_from_bytes(digest: &[u8]) -> Result<&Self, EntryError> {
         match digest.len() {
@@ -57,25 +65,42 @@ impl entry {
         self.bytes.len()
     }
 
-    /// Return a type which can display itself in hexadecimal form with the `len` amount of characters.
+    /// Return if length of the hash in bytesd is empty.
     #[inline]
-    pub fn to_hex_with_len(&self, len: usize) -> HexDisplay<'_> {
-        HexDisplay {
-            inner: self,
-            size: len.min(self.bytes.len() * 2), // Cap at actual size
-        }
-    }
-
-    /// Return a type which displays this oid as hex in full.
-    #[inline]
-    pub fn to_hex(&self) -> HexDisplay<'_> {
-        HexDisplay {
-            inner: self,
-            size: self.bytes.len() * 2,
-        }
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
     }
 }
 
+impl AsRef<entry> for &entry {
+    fn as_ref(&self) -> &entry {
+        self
+    }
+}
+
+impl<'a> TryFrom<&'a [u8]> for &'a entry {
+    type Error = error::EntryError;
+
+    fn try_from(value: &'a [u8]) -> Result<Self, Self::Error> {
+        entry::try_from_bytes(value)
+    }
+}
+
+impl ToOwned for entry {
+    type Owned = MrklEntry;
+
+    fn to_owned(&self) -> Self::Owned {
+        crate::MrklEntry::new(self.as_bytes())
+    }
+}
+
+impl PartialEq<MrklEntry> for &entry {
+    fn eq(&self, other: &MrklEntry) -> bool {
+        *self == other.as_ref()
+    }
+}
+
+#[cfg(feature = "std")]
 impl entry {
     /// Write ourselves to the `out` in hexadecimal notation, returning the hex-string ready for display.
     ///
@@ -92,7 +117,7 @@ impl entry {
         }
 
         // Convert to string
-        std::str::from_utf8_mut(&mut buf[..num_hex_bytes]).expect("hex digits are valid UTF-8")
+        str::from_utf8_mut(&mut buf[..num_hex_bytes]).expect("hex digits are valid UTF-8")
     }
 
     /// Write ourselves to `out` in hexadecimal notation.
@@ -102,13 +127,36 @@ impl entry {
         let hex_str = self.hex_to_buf(&mut hex_buf);
         out.write_all(hex_str.as_bytes())
     }
+
+    /// Return a type which can display itself in hexadecimal form with the `len` amount of characters.
+    #[inline]
+    pub fn to_hex_with_len(&self, len: usize) -> HexDisplay<'_> {
+        HexDisplay {
+            inner: self,
+            size: len.min(self.bytes.len() * 2), // Cap at actual size
+        }
+    }
+
+    /// Return a type which displays this entry as hex in full.
+    #[inline]
+    pub fn to_hex(&self) -> HexDisplay<'_> {
+        HexDisplay {
+            inner: self,
+            size: self.bytes.len() * 2,
+        }
+    }
 }
 
+///
+#[must_use]
+#[cfg(feature = "std")]
+#[derive(Debug)]
 pub struct HexDisplay<'a> {
     inner: &'a entry,
     size: usize,
 }
 
+#[cfg(feature = "std")]
 impl std::fmt::Display for HexDisplay<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mut buf = vec![0u8; self.size];
@@ -124,9 +172,75 @@ impl std::fmt::Display for HexDisplay<'_> {
     }
 }
 
+#[cfg(feature = "std")]
 impl std::fmt::Display for entry {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         writeln!(f, "{}", self.to_hex())
+    }
+}
+
+#[cfg(feature = "serde")]
+impl<'de: 'a, 'a> serde::Deserialize<'de> for &'a entry {
+    fn deserialize<D>(deserializer: D) -> Result<Self, <D as serde::Deserializer<'de>>::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        struct __Visitor<'de: 'a, 'a> {
+            marker: std::marker::PhantomData<&'a entry>,
+            lifetime: std::marker::PhantomData<&'de ()>,
+        }
+        impl<'de: 'a, 'a> serde::de::Visitor<'de> for __Visitor<'de, 'a> {
+            type Value = &'a entry;
+            fn expecting(&self, __formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                std::fmt::Formatter::write_str(__formatter, "tuple struct Digest")
+            }
+            #[inline]
+            fn visit_newtype_struct<__E>(
+                self,
+                __e: __E,
+            ) -> std::result::Result<Self::Value, __E::Error>
+            where
+                __E: serde::Deserializer<'de>,
+            {
+                let __field0: &'a [u8] = match <&'a [u8] as serde::Deserialize>::deserialize(__e) {
+                    Ok(__val) => __val,
+                    Err(__err) => {
+                        return Err(__err);
+                    }
+                };
+                Ok(entry::try_from_bytes(__field0).expect("hash of known length"))
+            }
+            #[inline]
+            fn visit_seq<__A>(self, mut __seq: __A) -> std::result::Result<Self::Value, __A::Error>
+            where
+                __A: serde::de::SeqAccess<'de>,
+            {
+                let __field0 =
+                    match match serde::de::SeqAccess::next_element::<&'a [u8]>(&mut __seq) {
+                        Ok(__val) => __val,
+                        Err(__err) => {
+                            return Err(__err);
+                        }
+                    } {
+                        Some(__value) => __value,
+                        None => {
+                            return Err(serde::de::Error::invalid_length(
+                                0usize,
+                                &"tuple struct Digest with 1 element",
+                            ));
+                        }
+                    };
+                Ok(entry::try_from_bytes(__field0).expect("hash of known length"))
+            }
+        }
+        serde::Deserializer::deserialize_newtype_struct(
+            deserializer,
+            "Digest",
+            __Visitor {
+                marker: std::marker::PhantomData::<&'a entry>,
+                lifetime: std::marker::PhantomData,
+            },
+        )
     }
 }
 
@@ -151,6 +265,7 @@ mod test {
         assert!(entry::try_from_bytes(&invalid).is_err());
     }
 
+    #[cfg(feature = "std")]
     #[test]
     fn test_hex_display() {
         let digest = vec![0xde, 0xad, 0xbe, 0xef]; // Not a valid hash size, but for testing
@@ -175,10 +290,6 @@ mod test {
         let e = entry::try_from_bytes(&result).unwrap();
         assert_eq!(e.len(), 20);
         assert_eq!(e.first_byte(), result[0]);
-
-        // Test hex display
-        let hex = format!("{}", e.to_hex());
-        assert_eq!(hex.len(), 40); // 20 bytes * 2 hex chars per byte
     }
 
     #[test]
@@ -190,8 +301,5 @@ mod test {
 
         let e = entry::try_from_bytes(&result).unwrap();
         assert_eq!(e.len(), 32);
-
-        let hex = format!("{}", e.to_hex());
-        assert_eq!(hex.len(), 64); // 32 bytes * 2
     }
 }
