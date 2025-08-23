@@ -114,7 +114,7 @@ pub trait Hasher {
 pub struct MrkleHasher<D: Digest> {
     /// Phantom data to maintain the generic parameter `D` without storing it.
     /// This allows the struct to be zero-sized while preserving type information.
-    _phantom: std::marker::PhantomData<D>,
+    _phantom: core::marker::PhantomData<D>,
 }
 
 impl<D: Digest> Default for MrkleHasher<D> {
@@ -142,7 +142,7 @@ impl<D: Digest> MrkleHasher<D> {
     /// ```
     pub fn new() -> Self {
         MrkleHasher::<D> {
-            _phantom: std::marker::PhantomData,
+            _phantom: core::marker::PhantomData,
         }
     }
 }
