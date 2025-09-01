@@ -17,11 +17,14 @@ serde = { version = "1.0.219", default-features = false, features = ["derive"] }
 [dev-dependencies]
 sha1 = "0.10.6"
 sha2 = "0.10.9"
+sha3 = "0.10.8"
+bincode = { version = "2.0.1", features = ["serde"] }
 
 [features]
 default = ["std"]
-std = ["thiserror/std", "serde/std"]
-alloc = ["serde/alloc"]
+std = ["thiserror/std"]
+alloc = []
+serde = ["serde/alloc"]
 
 [package.metadata.docs.rs]
 rustdoc-args = ["--html-in-header", "./docs/katex.html"]
