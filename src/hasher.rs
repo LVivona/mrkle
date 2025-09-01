@@ -1,6 +1,26 @@
 use crypto::digest::{Digest, OutputSizeUser};
 
+/// A fixed-size byte array used as a buffer for cryptographic hash output.
 ///
+/// This is a type alias for [`generic_array::GenericArray`], specialized with
+/// `u8` as the element type and the output size determined by the hash function `D`.
+///
+/// It is widely used across the [`RustCrypto`](https://github.com/RustCrypto) crates
+/// (e.g., [`sha1`], [`sha2`], [`sha3`], [`blake2`]) to represent digest outputs.
+///
+/// # Type Parameters
+/// - `D`: A type that implements [`crypto::common::OutputSizeUser`], providing the
+///   associated output size of the digest algorithm.
+///
+/// # Examples
+/// ```
+/// use sha2::Sha256;
+/// use mrkle::{GenericArray, MrkleHasher, Hasher};
+///
+/// // A 32-byte buffer for a SHA-256 digest
+/// let hasher: MrkleHasher<Sha256> = MrkleHasher::new();
+/// let output : GenericArray<Sha256> = hasher.hash(b"hello world");
+/// ```
 pub type GenericArray<D> = crypto::common::generic_array::GenericArray<
     u8,
     <D as crypto::common::OutputSizeUser>::OutputSize,
