@@ -1,15 +1,120 @@
-// #![deny(missing_docs)]
+#![deny(missing_docs)]
 #![doc = include_str!("../README.md")]
+#![cfg_attr(not(feature = "std"), no_std)]
 
-pub use crypto::digest::Digest;
+#[path = "entry.rs"]
+mod borrowed;
+pub use borrowed::*;
 
-mod builder;
-mod hasher;
-mod iter;
+/// Cryptographic hash utilities and traits used in Merkle trees.
+pub mod hasher;
 
-pub mod entry;
+/// Core tree structures and nodes for the Merkle tree implementation.
+///
+/// This module contains [`MrkleNode`], [`Tree`], and the [`NodeType`] trait.
+pub(crate) mod tree;
+
+/// Error types for the Merkle tree crate.
+///
+/// Includes errors for tree construction, hashing, and I/O operations.
 pub mod error;
 
-pub use hasher::{Hasher, MrkleHasher};
+pub use crate::hasher::{Hasher, MrkleHasher};
+use crate::tree::{DefaultIx, IndexType};
+pub use crate::tree::{MrkleNode, NodeType, Tree};
 
-pub struct MrkleTree {}
+use crypto::digest::Digest;
+
+#[cfg(not(feature = "std"))]
+#[macro_use]
+extern crate alloc;
+
+pub(crate) mod prelude {
+    #[cfg(not(feature = "std"))]
+    mod no_stds {
+
+        pub use alloc::str;
+
+        pub use alloc::vec::Vec;
+    }
+
+    #[cfg(feature = "std")]
+    mod stds {
+        pub use std::borrow::{Cow, ToOwned};
+        pub use std::str;
+        pub use std::vec::Vec;
+    }
+
+    pub use core::borrow::Borrow;
+    pub use core::marker::{Copy, PhantomData};
+    /// choose std or no_std to export by feature flag
+    #[cfg(not(feature = "std"))]
+    pub use no_stds::*;
+    #[cfg(feature = "std")]
+    pub use stds::*;
+}
+
+pub(crate) use prelude::*;
+
+impl<T, D: Digest, Ix: IndexType> AsRef<entry> for MrkleNode<T, D, Ix> {
+    fn as_ref(&self) -> &entry {
+        entry::from_bytes_unchecked(&self.hash)
+    }
+}
+
+impl<T, D: Digest, Ix: IndexType> core::ops::Deref for MrkleNode<T, D, Ix> {
+    type Target = entry;
+    fn deref(&self) -> &Self::Target {
+        self.as_ref()
+    }
+}
+
+impl<T, D: Digest> Borrow<entry> for MrkleNode<T, D> {
+    fn borrow(&self) -> &entry {
+        self.as_ref()
+    }
+}
+
+/// A wrapper around the [`Tree`] data structure.
+/// [`MrkleTree`] (short for *Merkle Tree*) is a cryptographic hash tree
+/// used as the foundation for data validation.
+///
+/// Merkle Trees enable efficient verification of data integrity, ensuring
+/// that each `T` (data block) can be confirmed as received without
+/// corruption or tampering.
+pub struct MrkleTree<T, D: Digest, Ix: IndexType = DefaultIx> {
+    /// The underlying tree storing nodes
+    core: Tree<T, MrkleNode<T, D, Ix>, Ix>,
+    /// The hasher used for digesting nodes
+    hasher: MrkleHasher<D>,
+}
+
+impl<T, D: Digest> Default for MrkleTree<T, D> {
+    /// Build a default `MrkleTree` with an empty core and a new hasher.
+    fn default() -> Self {
+        Self {
+            core: Tree::new(),
+            hasher: MrkleHasher::new(),
+        }
+    }
+}
+
+impl<T, D: Digest> MrkleTree<T, D> {
+    /// Returns `true` if the tree contains no nodes.
+    #[inline]
+    pub fn is_empty(&self) -> bool {
+        self.core.length() == 0
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use crate::MrkleTree;
+
+    #[test]
+    fn test_merkle_tree_default_build() {
+        let tree: MrkleTree<[u8; 32], _> = MrkleTree::<[u8; 32], sha1::Sha1>::default();
+
+        assert!(tree.is_empty())
+    }
+}

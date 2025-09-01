@@ -1,7 +1,10 @@
-use crate::error::{self, EntryError};
-use crate::{MrklEntry, prelude::*};
+use crypto::digest::Digest;
 
-/// Object that holds the bytes hashed `MrklEntry`
+use crate::error::{self, EntryError};
+use crate::tree::IndexType;
+use crate::{MrkleNode, prelude::*};
+
+/// Object that holds the bytes hashed `MrkleNode`
 /// used for reference of the array.
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
 #[repr(transparent)]
@@ -86,45 +89,37 @@ impl<'a> TryFrom<&'a [u8]> for &'a entry {
     }
 }
 
-impl ToOwned for entry {
-    type Owned = MrklEntry;
-
-    fn to_owned(&self) -> Self::Owned {
-        crate::MrklEntry::new(self.as_bytes())
-    }
-}
-
-impl PartialEq<MrklEntry> for &entry {
-    fn eq(&self, other: &MrklEntry) -> bool {
+impl<T, D: Digest, Ix: IndexType> PartialEq<MrkleNode<T, D, Ix>> for &entry {
+    fn eq(&self, other: &MrkleNode<T, D, Ix>) -> bool {
         *self == other.as_ref()
     }
 }
 
-#[cfg(feature = "std")]
 impl entry {
     /// Write ourselves to the `out` in hexadecimal notation, returning the hex-string ready for display.
     ///
     /// **Panics** if the buffer isn't big enough to hold twice as many bytes as the current binary size.
     #[inline]
     #[must_use]
-    pub fn hex_to_buf<'a>(&self, buf: &'a mut [u8]) -> &'a mut str {
+    pub fn hex_to_buffer<'a>(&self, buffer: &'a mut [u8]) -> &'a mut str {
         let num_hex_bytes = self.bytes.len() * 2;
         // Use a simple hex implementation since faster_hex might not be available
         for (i, &byte) in self.bytes.iter().enumerate() {
             let hex_chars = format!("{:02x}", byte);
-            buf[i * 2] = hex_chars.as_bytes()[0];
-            buf[i * 2 + 1] = hex_chars.as_bytes()[1];
+            buffer[i * 2] = hex_chars.as_bytes()[0];
+            buffer[i * 2 + 1] = hex_chars.as_bytes()[1];
         }
 
         // Convert to string
-        str::from_utf8_mut(&mut buf[..num_hex_bytes]).expect("hex digits are valid UTF-8")
+        str::from_utf8_mut(&mut buffer[..num_hex_bytes]).expect("hex digits are valid UTF-8")
     }
 
     /// Write ourselves to `out` in hexadecimal notation.
     #[inline]
-    pub fn write_hex_to(&self, out: &mut dyn std::io::Write) -> std::io::Result<()> {
+    #[cfg(feature = "std")]
+    pub fn hex_to_writer<W: std::io::Write>(&self, out: &mut W) -> std::io::Result<()> {
         let mut hex_buf = vec![0u8; self.bytes.len() * 2];
-        let hex_str = self.hex_to_buf(&mut hex_buf);
+        let hex_str = self.hex_to_buffer(&mut hex_buf);
         out.write_all(hex_str.as_bytes())
     }
 
@@ -147,26 +142,29 @@ impl entry {
     }
 }
 
+/// **std** feature extension of the [`entry`] structure.
+///
+/// ```
+///
+///
+/// ```
 ///
 #[must_use]
-#[cfg(feature = "std")]
-#[derive(Debug)]
-pub struct HexDisplay<'a> {
-    inner: &'a entry,
+pub struct HexDisplay<'id> {
+    inner: &'id entry,
     size: usize,
 }
 
-#[cfg(feature = "std")]
-impl std::fmt::Display for HexDisplay<'_> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl core::fmt::Display for HexDisplay<'_> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         let mut buf = vec![0u8; self.size];
         let hex_str = if self.size <= self.inner.bytes.len() * 2 {
             // Truncate if requested size is smaller
             let truncated_bytes = self.size / 2;
             let temp_entry = entry::from_bytes(&self.inner.bytes[..truncated_bytes]);
-            temp_entry.hex_to_buf(&mut buf)
+            temp_entry.hex_to_buffer(&mut buf)
         } else {
-            self.inner.hex_to_buf(&mut buf)
+            self.inner.hex_to_buffer(&mut buf)
         };
         f.write_str(&hex_str[..self.size.min(hex_str.len())])
     }
@@ -186,19 +184,19 @@ impl<'de: 'a, 'a> serde::Deserialize<'de> for &'a entry {
         D: serde::Deserializer<'de>,
     {
         struct __Visitor<'de: 'a, 'a> {
-            marker: std::marker::PhantomData<&'a entry>,
-            lifetime: std::marker::PhantomData<&'de ()>,
+            marker: core::marker::PhantomData<&'a entry>,
+            lifetime: core::marker::PhantomData<&'de ()>,
         }
         impl<'de: 'a, 'a> serde::de::Visitor<'de> for __Visitor<'de, 'a> {
             type Value = &'a entry;
-            fn expecting(&self, __formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-                std::fmt::Formatter::write_str(__formatter, "tuple struct Digest")
+            fn expecting(&self, __formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+                core::fmt::Formatter::write_str(__formatter, "tuple struct Digest")
             }
             #[inline]
             fn visit_newtype_struct<__E>(
                 self,
                 __e: __E,
-            ) -> std::result::Result<Self::Value, __E::Error>
+            ) -> core::result::Result<Self::Value, __E::Error>
             where
                 __E: serde::Deserializer<'de>,
             {
@@ -211,7 +209,7 @@ impl<'de: 'a, 'a> serde::Deserialize<'de> for &'a entry {
                 Ok(entry::try_from_bytes(__field0).expect("hash of known length"))
             }
             #[inline]
-            fn visit_seq<__A>(self, mut __seq: __A) -> std::result::Result<Self::Value, __A::Error>
+            fn visit_seq<__A>(self, mut __seq: __A) -> core::result::Result<Self::Value, __A::Error>
             where
                 __A: serde::de::SeqAccess<'de>,
             {
@@ -237,8 +235,8 @@ impl<'de: 'a, 'a> serde::Deserialize<'de> for &'a entry {
             deserializer,
             "Digest",
             __Visitor {
-                marker: std::marker::PhantomData::<&'a entry>,
-                lifetime: std::marker::PhantomData,
+                marker: core::marker::PhantomData::<&'a entry>,
+                lifetime: core::marker::PhantomData,
             },
         )
     }
