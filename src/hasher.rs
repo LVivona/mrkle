@@ -1,5 +1,11 @@
 use crypto::digest::{Digest, OutputSizeUser};
 
+///
+pub type GenericArray<D> = crypto::common::generic_array::GenericArray<
+    u8,
+    <D as crypto::common::OutputSizeUser>::OutputSize,
+>;
+
 /// A trait for cryptographic hashing operations with support for data concatenation.
 ///
 /// This trait provides a unified interface for hashing algorithms commonly used in
@@ -15,6 +21,7 @@ use crypto::digest::{Digest, OutputSizeUser};
 ///
 /// ```rust
 /// use sha2::Sha256;
+/// use mrkle::Hasher;
 ///
 /// let hasher = mrkle::MrkleHasher::<Sha256>::new();
 /// let data = b"hello world";
@@ -100,6 +107,7 @@ pub trait Hasher {
 /// ```rust
 /// use sha2::Sha256;
 /// use sha3::Sha3_256;
+/// use mrkle::Hasher;
 ///
 /// // Create a SHA-256 based hasher
 /// let sha256_hasher = mrkle::MrkleHasher::<Sha256>::new();
@@ -136,20 +144,35 @@ impl<D: Digest> MrkleHasher<D> {
     /// # Examples
     ///
     /// ```rust
-    /// use crypto::sha2::Sha256;
+    /// use sha2::Sha256;
     ///
-    /// let hasher = MrkleHasher::<Sha256>::new();
+    /// let hasher = mrkle::MrkleHasher::<Sha256>::new();
     /// ```
     pub fn new() -> Self {
         MrkleHasher::<D> {
             _phantom: core::marker::PhantomData,
         }
     }
+
+    /// Public wrapping over the Digest Trait allowing for single
+    /// use.
+    ///
+    /// ```
+    /// use sha1::Sha1;
+    ///
+    ///
+    /// let data = b"hello world";
+    /// let output = mrkle::MrkleHasher::<Sha1>::digest(&data);
+    /// ```
+    pub fn digest<T: AsRef<[u8]>>(
+        input: T,
+    ) -> crypto::common::generic_array::GenericArray<u8, <D as OutputSizeUser>::OutputSize> {
+        D::digest(input)
+    }
 }
 
 impl<D: Digest> Hasher for MrkleHasher<D> {
-    type Output =
-        crypto::common::generic_array::GenericArray<u8, <D as OutputSizeUser>::OutputSize>;
+    type Output = GenericArray<D>;
 
     /// Computes the hash using the underlying digest algorithm.
     ///
@@ -201,6 +224,7 @@ mod test {
     use crypto::digest::Digest;
     use sha1::Sha1;
     use sha2::Sha256;
+    use sha3::Keccak256;
 
     #[test]
     fn test_sha1_hasher() {
@@ -253,5 +277,24 @@ mod test {
 
         assert!(hasher.certificate(true) == 0x00);
         assert!(hasher.certificate(false) == 0x01)
+    }
+
+    #[test]
+    fn test_sha3_keccak() {
+        let plaintext = b"hello world";
+        let hasher = MrkleHasher::<Keccak256>::new();
+        let output = hasher.hash(plaintext);
+
+        let expected = Keccak256::digest(plaintext);
+        assert_eq!(output, expected)
+    }
+
+    #[test]
+    fn test_sha3_keccak_digest() {
+        let plaintext = b"hello world";
+        let output = MrkleHasher::<Keccak256>::digest(plaintext);
+
+        let expected = Keccak256::digest(plaintext);
+        assert_eq!(output, expected)
     }
 }
