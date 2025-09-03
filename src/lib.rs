@@ -19,9 +19,8 @@ pub(crate) mod tree;
 /// Includes errors for tree construction, hashing, and I/O operations.
 pub mod error;
 
-pub use crate::hasher::{Hasher, MrkleHasher};
-use crate::tree::{DefaultIx, IndexType};
-pub use crate::tree::{MrkleNode, NodeType, Tree};
+pub use crate::hasher::{GenericArray, Hasher, MrkleHasher};
+pub use crate::tree::{DefaultIx, IndexType, MrkleNode, NodeType, Tree};
 
 use crypto::digest::Digest;
 
@@ -29,23 +28,26 @@ use crypto::digest::Digest;
 #[macro_use]
 extern crate alloc;
 
+#[allow(unused_imports, reason = "future proofing for tree features.")]
 pub(crate) mod prelude {
     #[cfg(not(feature = "std"))]
     mod no_stds {
-
+        pub use alloc::borrow::{Borrow, Cow, ToOwned};
+        pub use alloc::collections::{BTreeMap, VecDeque};
         pub use alloc::str;
-
+        pub use alloc::string::{String, ToString};
         pub use alloc::vec::Vec;
     }
 
     #[cfg(feature = "std")]
     mod stds {
-        pub use std::borrow::{Cow, ToOwned};
+        pub use std::borrow::{Borrow, Cow, ToOwned};
+        pub use std::collections::{BTreeMap, VecDeque};
         pub use std::str;
+        pub use std::string::{String, ToString};
         pub use std::vec::Vec;
     }
 
-    pub use core::borrow::Borrow;
     pub use core::marker::{Copy, PhantomData};
     /// choose std or no_std to export by feature flag
     #[cfg(not(feature = "std"))]
@@ -82,15 +84,21 @@ impl<T, D: Digest> Borrow<entry> for MrkleNode<T, D> {
 /// Merkle Trees enable efficient verification of data integrity, ensuring
 /// that each `T` (data block) can be confirmed as received without
 /// corruption or tampering.
-pub struct MrkleTree<T, D: Digest, Ix: IndexType = DefaultIx> {
+pub struct MrkleTree<T, D: Digest, Ix: IndexType = DefaultIx>
+where
+    T: Clone,
+{
     /// The underlying tree storing nodes
     core: Tree<T, MrkleNode<T, D, Ix>, Ix>,
     /// The hasher used for digesting nodes
     hasher: MrkleHasher<D>,
 }
 
-impl<T, D: Digest> Default for MrkleTree<T, D> {
-    /// Build a default `MrkleTree` with an empty core and a new hasher.
+impl<T, D: Digest> Default for MrkleTree<T, D>
+where
+    T: Clone,
+{
+    /// Build a default `MrkleTree` with an empty tree and a new hasher.
     fn default() -> Self {
         Self {
             core: Tree::new(),
@@ -99,11 +107,14 @@ impl<T, D: Digest> Default for MrkleTree<T, D> {
     }
 }
 
-impl<T, D: Digest> MrkleTree<T, D> {
+impl<T, D: Digest> MrkleTree<T, D>
+where
+    T: Clone,
+{
     /// Returns `true` if the tree contains no nodes.
     #[inline]
     pub fn is_empty(&self) -> bool {
-        self.core.length() == 0
+        self.core.is_empty()
     }
 }
 
