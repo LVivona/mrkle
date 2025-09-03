@@ -312,6 +312,7 @@ impl<T, D: Digest, Ix: IndexType> NodeType<Ix> for MrkleNode<T, D, Ix>
 where
     T: Clone,
 {
+    #[inline]
     fn is_leaf(&self) -> bool {
         self.payload.is_leaf() && self.children.len() == 0
     }

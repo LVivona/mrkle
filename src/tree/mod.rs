@@ -1,7 +1,10 @@
+#[path = "view.rs"]
+mod borrow;
 mod node;
 
 use crate::error::TreeError;
 use crate::prelude::*;
+pub use borrow::TreeView;
 pub use node::{DefaultIx, IndexType, MrkleNode, NodeIndex, NodeType};
 
 /// [`Tree`] is a generic hierarchical tree data structure.
@@ -18,7 +21,7 @@ pub struct Tree<T, N: NodeType<Ix>, Ix: IndexType = DefaultIx> {
     /// The index of the root node, if any.
     ///
     /// This is `None` if the tree is empty or is being built from leaves.
-    root: Option<NodeIndex<Ix>>,
+    pub(crate) root: Option<NodeIndex<Ix>>,
 
     /// Collection of all nodes in the tree.
     ///
@@ -26,7 +29,7 @@ pub struct Tree<T, N: NodeType<Ix>, Ix: IndexType = DefaultIx> {
     pub(crate) nodes: Vec<N>,
 
     /// Marker for the generic type `T`.
-    _phantom: PhantomData<T>,
+    phantom: PhantomData<T>,
 }
 
 impl<T, N: NodeType<Ix>, Ix: IndexType> Tree<T, N, Ix> {
@@ -36,7 +39,7 @@ impl<T, N: NodeType<Ix>, Ix: IndexType> Tree<T, N, Ix> {
         Self {
             root: None,
             nodes: Vec::new(),
-            _phantom: PhantomData,
+            phantom: PhantomData,
         }
     }
 
@@ -49,7 +52,7 @@ impl<T, N: NodeType<Ix>, Ix: IndexType> Tree<T, N, Ix> {
         Self {
             root: None,
             nodes: Vec::with_capacity(capacity),
-            _phantom: PhantomData,
+            phantom: PhantomData,
         }
     }
 
@@ -57,68 +60,6 @@ impl<T, N: NodeType<Ix>, Ix: IndexType> Tree<T, N, Ix> {
     #[inline]
     pub fn length(&self) -> usize {
         self.nodes.len()
-    }
-
-    /// Adds a new node with the given `value` to the tree.
-    ///
-    /// # Returns
-    /// The [`NodeIndex`] of the newly inserted node.
-    ///
-    /// # Panics
-    /// If the tree is at its maximum number of nodes for the chosen index type.
-    #[inline]
-    #[must_use]
-    pub fn add_node(&mut self, value: T) -> NodeIndex<Ix> {
-        self.try_add_node(value).unwrap()
-    }
-
-    /// Attempts to add a new node with the given `value` to the tree.
-    ///
-    /// # Returns
-    /// - `Ok(NodeIndex)` with the index of the new node.
-    /// - `Err(TreeError)` if the node cannot be added.
-    #[must_use]
-    pub fn try_add_node(&mut self, value: T) -> Result<NodeIndex<Ix>, TreeError<Ix>> {
-        todo!()
-    }
-
-    /// Attaches multiple children under a specified parent node.
-    ///
-    /// # Parameters
-    /// - `parent`: The index of the parent node.
-    /// - `children`: A vector of child node indices.
-    ///
-    /// # Returns
-    /// - `Ok(())` on success.
-    /// - `Err(TreeError)` if the operation fails (e.g., invalid indices).
-    fn join_node_index(
-        &mut self,
-        parent: NodeIndex<Ix>,
-        children: Vec<NodeIndex<Ix>>,
-    ) -> Result<(), TreeError<Ix>> {
-        Ok(())
-    }
-
-    /// Creates a new parent node for two existing nodes.
-    ///
-    /// # Parameters
-    /// - `value`: The data to store in the parent node.
-    /// - `lhs`: Index of the left child.
-    /// - `rhs`: Index of the right child.
-    ///
-    /// # Returns
-    /// The [`NodeIndex`] of the newly created parent node.
-    pub fn join(&mut self, value: T, lhs: NodeIndex<Ix>, rhs: NodeIndex<Ix>) -> NodeIndex<Ix> {
-        todo!()
-    }
-
-    /// Attempts to create a parent node from a value.
-    ///
-    /// # Returns
-    /// - `Ok(NodeIndex)` with the index of the new node.
-    /// - `Err(TreeError)` if the operation fails.
-    pub fn try_join(&mut self, value: T) -> Result<NodeIndex<Ix>, TreeError<Ix>> {
-        todo!()
     }
 
     /// Returns a reference to the root node.
@@ -138,7 +79,83 @@ impl<T, N: NodeType<Ix>, Ix: IndexType> Tree<T, N, Ix> {
         if let Some(idx) = self.root {
             Ok(&self.nodes[idx.index()])
         } else {
+            // NOTE: The only occurance of this would likely happen
+            // if programmer had straight access to the Tree data
+            // structure in construction.
             Err(TreeError::MissingRoot)
         }
+    }
+
+    ///Return root [`TreeView`] of the [`Tree`]
+    pub fn view(&self) -> TreeView<'_, T, N, Ix> {
+        TreeView::from(self)
+    }
+
+    /// Returns `true` if the tree contains no nodes.
+    #[inline]
+    pub fn is_empty(&self) -> bool {
+        self.length() == 0
+    }
+}
+
+impl<T, N: NodeType<Ix>, Ix: IndexType> Default for Tree<T, N, Ix> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[cfg(test)]
+mod test {
+
+    use crate::{DefaultIx, prelude::*};
+    use crate::{IndexType, NodeType, Tree, tree::NodeIndex};
+
+    #[derive(Debug, Clone, PartialEq, Eq)]
+    pub(crate) struct Node<T, Ix: IndexType = DefaultIx>
+    where
+        T: Clone,
+    {
+        pub(crate) value: T,
+        pub(crate) parent: Option<NodeIndex<Ix>>,
+        pub(crate) children: Vec<NodeIndex<Ix>>,
+    }
+
+    impl<T, Ix: IndexType> Node<T, Ix>
+    where
+        T: Clone,
+    {
+        pub(crate) fn new(value: T) -> Self {
+            Self {
+                value,
+                parent: None,
+                children: Vec::new(),
+            }
+        }
+    }
+
+    impl<T, Ix: IndexType> NodeType<Ix> for Node<T, Ix>
+    where
+        T: Clone,
+    {
+        fn is_leaf(&self) -> bool {
+            self.children.len() == 0
+        }
+        fn children(&self) -> Vec<NodeIndex<Ix>> {
+            self.children.clone()
+        }
+
+        fn contains(&self, node: &NodeIndex<Ix>) -> bool {
+            self.children.contains(node)
+        }
+
+        fn parent(&self) -> Option<NodeIndex<Ix>> {
+            self.parent
+        }
+    }
+
+    #[test]
+    fn test_empty_tree_construction() {
+        let tree: Tree<u8, Node<u8>> = Tree::new();
+        assert!(tree.is_empty())
     }
 }
