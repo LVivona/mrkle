@@ -1,10 +1,12 @@
 #[path = "view.rs"]
 mod borrow;
+mod iter;
 mod node;
 
 use crate::error::TreeError;
 use crate::prelude::*;
 pub use borrow::TreeView;
+pub use iter::Iter;
 pub use node::{DefaultIx, IndexType, MrkleNode, NodeIndex, NodeType};
 
 /// [`Tree`] is a generic hierarchical tree data structure.
@@ -96,11 +98,67 @@ impl<T, N: NodeType<Ix>, Ix: IndexType> Tree<T, N, Ix> {
     pub fn is_empty(&self) -> bool {
         self.length() == 0
     }
+
+    /// Returns Iterator pattern [`Iter`].
+    pub fn iter(&self) -> Iter<'_, T, N, Ix> {
+        Iter::new(&self)
+    }
+
+    /// Create a [`TreeView`] from a specific node as root.
+    pub fn subtree_view(&self, root: NodeIndex<Ix>) -> Option<TreeView<T, N, Ix>> {
+        // Check if the node exists
+        if root.index() >= self.nodes.len() {
+            return None;
+        }
+
+        let root_node = &self.nodes[root.index()];
+        let mut nodes: Vec<(NodeIndex<Ix>, &N)> = vec![(root, root_node)];
+
+        // BFS to collect all nodes in the subtree
+        let mut queue: VecDeque<NodeIndex<Ix>> = VecDeque::from(vec![root]);
+
+        while let Some(current_idx) = queue.pop_front() {
+            let current_node = &self.nodes[current_idx.index()];
+
+            for child_idx in current_node.children() {
+                if child_idx.index() < self.nodes.len() {
+                    let child_node = &self.nodes[child_idx.index()];
+                    nodes.push((child_idx, child_node));
+                    queue.push_back(child_idx);
+                }
+            }
+        }
+
+        Some(TreeView::new(root, nodes))
+    }
+
+    /// Create a [`TreeView`] from a node reference.
+    pub fn subtree_from_node(&self, target: &N) -> Option<TreeView<T, N, Ix>>
+    where
+        N: PartialEq,
+    {
+        // Find the index of the target node
+        for (idx, node) in self.nodes.iter().enumerate() {
+            if node == target {
+                return self.subtree_view(NodeIndex::new(idx));
+            }
+        }
+        None
+    }
 }
 
 impl<T, N: NodeType<Ix>, Ix: IndexType> Default for Tree<T, N, Ix> {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+impl<'a, T, N: NodeType<Ix>, Ix: IndexType> IntoIterator for &'a Tree<T, N, Ix> {
+    type IntoIter = Iter<'a, T, N, Ix>;
+    type Item = &'a N;
+
+    fn into_iter(self) -> Self::IntoIter {
+        Iter::new(self)
     }
 }
 
@@ -157,5 +215,47 @@ mod test {
     fn test_empty_tree_construction() {
         let tree: Tree<u8, Node<u8>> = Tree::new();
         assert!(tree.is_empty())
+    }
+
+    #[test]
+    fn test_tree_iter() {
+        let mut root: Node<String> = Node::new("hello".to_string());
+        root.children = vec![NodeIndex::new(1), NodeIndex::new(2)];
+        let mut tree: Tree<String, Node<String>> = Tree::new();
+        tree.root = Some(NodeIndex::new(0));
+        tree.nodes.push(root);
+        tree.nodes.push(Node::new("world".to_string()));
+        tree.nodes.push(Node::new("!".to_string()));
+
+        let mut tree_iter = tree.into_iter();
+
+        // Test that we get the root first
+        let root_ref = tree_iter.next().unwrap();
+        assert_eq!(root_ref.value, "hello");
+
+        // Test that we get the children in breadth-first order
+        let child1 = tree_iter.next().unwrap();
+        assert_eq!(child1.value, "world");
+
+        let child2 = tree_iter.next().unwrap();
+        assert_eq!(child2.value, "!");
+
+        // Test that iterator is exhausted
+        assert!(tree_iter.next().is_none());
+    }
+
+    #[test]
+    fn test_tree_subtree() {
+        let mut root: Node<String> = Node::new("hello".to_string());
+        root.children = vec![NodeIndex::new(1), NodeIndex::new(2)];
+        let mut tree: Tree<String, Node<String>> = Tree::new();
+        tree.root = Some(NodeIndex::new(0));
+        tree.nodes.push(root);
+        tree.nodes.push(Node::new("world".to_string()));
+        tree.nodes.push(Node::new("!".to_string()));
+
+        let subtree = tree.subtree_view(NodeIndex::new(1)).unwrap();
+        assert!(subtree.len() == 1);
+        assert!(subtree.root() == &tree.nodes[1]);
     }
 }

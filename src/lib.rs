@@ -4,7 +4,6 @@
 
 #[path = "entry.rs"]
 mod borrowed;
-pub use borrowed::*;
 
 /// Cryptographic hash utilities and traits used in Merkle trees.
 pub mod hasher;
@@ -20,7 +19,8 @@ pub(crate) mod tree;
 pub mod error;
 
 pub use crate::hasher::{GenericArray, Hasher, MrkleHasher};
-pub use crate::tree::{DefaultIx, IndexType, MrkleNode, NodeType, Tree};
+pub use crate::tree::{DefaultIx, IndexType, MrkleNode, NodeIndex, NodeType, Tree, TreeView};
+pub use borrowed::*;
 
 use crypto::digest::Digest;
 
@@ -61,13 +61,6 @@ pub(crate) use prelude::*;
 impl<T, D: Digest, Ix: IndexType> AsRef<entry> for MrkleNode<T, D, Ix> {
     fn as_ref(&self) -> &entry {
         entry::from_bytes_unchecked(&self.hash)
-    }
-}
-
-impl<T, D: Digest, Ix: IndexType> core::ops::Deref for MrkleNode<T, D, Ix> {
-    type Target = entry;
-    fn deref(&self) -> &Self::Target {
-        self.as_ref()
     }
 }
 

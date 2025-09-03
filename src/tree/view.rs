@@ -5,6 +5,7 @@ use crate::prelude::*;
 ///
 /// It a borrowed store of a sub-tree containing nodes connected
 /// in a parent-child relationship. Similarly to the [`Tree`].
+#[derive(Debug)]
 pub struct TreeView<'s, T, N: NodeType<Ix>, Ix: IndexType = DefaultIx> {
     /// The index of the root.
     pub(crate) root: NodeIndex<Ix>,
@@ -70,11 +71,8 @@ impl<'s, T, N: NodeType<Ix>, Ix: IndexType> From<&'s Tree<T, N, Ix>> for TreeVie
                 q.push_back(child);
             }
         }
-        Self {
-            root,
-            nodes: nodes.into_iter().collect(),
-            phantom: PhantomData,
-        }
+
+        TreeView::new(root, nodes)
     }
 }
 
