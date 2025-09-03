@@ -19,8 +19,11 @@ pub type DefaultIx = u32;
 pub unsafe trait IndexType:
     Copy + Default + core::cmp::Ord + core::fmt::Debug + 'static
 {
+    /// Construct new `IndexType` from usize.
     fn new(x: usize) -> Self;
+    /// Return `IndexType` current index value.
     fn index(&self) -> usize;
+    /// Return max value.
     fn max() -> Self;
 }
 
@@ -150,9 +153,12 @@ impl<Ix: IndexType> From<u32> for NodeIndex<Ix> {
 }
 
 /// Trait for generic Node data type.
-pub trait NodeType<Ix: IndexType> {
+pub trait NodeType<Ix: IndexType>: Clone {
     /// Returns if the the current node is a leaf.
-    fn is_leaf(&self) -> bool;
+    #[inline(always)]
+    fn is_leaf(&self) -> bool {
+        self.parent().is_some() && self.children().len() == 0
+    }
 
     /// Return parent if there exist one.
     fn parent(&self) -> Option<NodeIndex<Ix>>;
@@ -288,17 +294,31 @@ impl<T> core::ops::Deref for Payload<T> {
     }
 }
 
-impl<T, D: Digest, Ix: IndexType> NodeType<Ix> for MrkleNode<T, D, Ix> {
+impl<T, D: Digest, Ix: IndexType> Clone for MrkleNode<T, D, Ix>
+where
+    T: Clone,
+{
+    fn clone(&self) -> Self {
+        Self {
+            payload: self.payload.clone(),
+            parent: self.parent,
+            children: self.children.clone(),
+            hash: self.hash.clone(),
+        }
+    }
+}
+
+impl<T, D: Digest, Ix: IndexType> NodeType<Ix> for MrkleNode<T, D, Ix>
+where
+    T: Clone,
+{
+    fn is_leaf(&self) -> bool {
+        self.payload.is_leaf() && self.children.len() == 0
+    }
     /// Return if `MrkelNode` has children.
     #[inline]
     fn children(&self) -> Vec<NodeIndex<Ix>> {
         self.children.clone()
-    }
-
-    /// Return if `MrkleNode` is a leaf node.
-    #[inline]
-    fn is_leaf(&self) -> bool {
-        self.payload.is_leaf()
     }
 
     /// Return parent index.
@@ -325,6 +345,16 @@ mod test {
     };
 
     const DATA_PAYLOAD: [u8; 32] = [0u8; 32];
+
+    #[test]
+    fn test_is_leaf_logic() {
+        let leaf = MrkleNode::<_, sha1::Sha1>::leaf(DATA_PAYLOAD);
+        assert!(leaf.is_leaf());
+
+        let hash = MrkleHasher::<sha1::Sha1>::digest(&leaf.hash);
+        let internal = MrkleNode::<[u8; 32], sha1::Sha1>::internal(vec![NodeIndex::new(1)], hash);
+        assert!(!internal.is_leaf())
+    }
 
     #[test]
     fn test_default_mrkle_node() {
