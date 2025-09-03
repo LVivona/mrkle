@@ -44,6 +44,23 @@ unsafe impl IndexType for usize {
     }
 }
 
+unsafe impl IndexType for u64 {
+    #[inline]
+    fn new(x: usize) -> Self {
+        x as u64
+    }
+
+    #[inline]
+    fn index(&self) -> usize {
+        *self as usize
+    }
+
+    #[inline]
+    fn max() -> Self {
+        u64::MAX
+    }
+}
+
 unsafe impl IndexType for u32 {
     #[inline]
     fn new(x: usize) -> Self {
@@ -78,12 +95,6 @@ unsafe impl IndexType for u16 {
     }
 }
 
-impl<Ix: core::fmt::Debug> core::fmt::Debug for NodeIndex<Ix> {
-    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
-        write!(f, "NodeIndex({:?})", self.0)
-    }
-}
-
 unsafe impl IndexType for u8 {
     #[inline(always)]
     fn new(x: usize) -> Self {
@@ -101,6 +112,12 @@ unsafe impl IndexType for u8 {
     }
 }
 
+impl<Ix: core::fmt::Debug> core::fmt::Debug for NodeIndex<Ix> {
+    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+        write!(f, "NodeIndex({:?})", self.0)
+    }
+}
+
 /// The node identifier for tree nodes.
 ///
 /// Cheap indexing data type that allows for fast clone or copy.
@@ -110,16 +127,19 @@ unsafe impl IndexType for u8 {
 pub struct NodeIndex<Ix = DefaultIx>(Ix);
 
 impl<Ix: IndexType> NodeIndex<Ix> {
+    /// Construct new `IndexType` from usize.
     #[inline]
     pub fn new(x: usize) -> Self {
         NodeIndex(IndexType::new(x))
     }
 
+    /// Return `IndexType` current index value.
     #[inline]
     pub fn index(self) -> usize {
         self.0.index()
     }
 
+    /// Return max value.
     #[inline]
     pub fn end() -> Self {
         NodeIndex(IndexType::max())
@@ -140,14 +160,32 @@ unsafe impl<Ix: IndexType> IndexType for NodeIndex<Ix> {
     }
 }
 
-impl<Ix: IndexType> From<usize> for NodeIndex<Ix> {
+impl From<usize> for NodeIndex<usize> {
     fn from(val: usize) -> Self {
         NodeIndex::new(val)
     }
 }
 
-impl<Ix: IndexType> From<u32> for NodeIndex<Ix> {
+impl From<u64> for NodeIndex<u64> {
+    fn from(val: u64) -> Self {
+        NodeIndex::new(val as usize)
+    }
+}
+
+impl From<u32> for NodeIndex<u32> {
     fn from(val: u32) -> Self {
+        NodeIndex::new(val as usize)
+    }
+}
+
+impl From<u16> for NodeIndex<u16> {
+    fn from(val: u16) -> Self {
+        NodeIndex::new(val as usize)
+    }
+}
+
+impl From<u8> for NodeIndex<u8> {
+    fn from(val: u8) -> Self {
         NodeIndex::new(val as usize)
     }
 }
