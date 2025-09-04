@@ -2,6 +2,15 @@
 #![doc = include_str!("../README.md")]
 #![cfg_attr(not(feature = "std"), no_std)]
 
+#[cfg(not(feature = "std"))]
+#[macro_use]
+extern crate alloc;
+
+#[cfg(all(feature = "std", feature = "alloc"))]
+compile_error!("must choose either the `std` or `alloc` feature, but not both.");
+#[cfg(all(not(feature = "std"), not(feature = "alloc")))]
+compile_error!("must choose either the `std` or `alloc` feature");
+
 #[path = "entry.rs"]
 mod borrowed;
 
@@ -24,10 +33,6 @@ pub use borrowed::*;
 
 use crypto::digest::Digest;
 
-#[cfg(not(feature = "std"))]
-#[macro_use]
-extern crate alloc;
-
 #[allow(unused_imports, reason = "future proofing for tree features.")]
 pub(crate) mod prelude {
     #[cfg(not(feature = "std"))]
@@ -49,14 +54,11 @@ pub(crate) mod prelude {
     }
 
     pub use core::marker::{Copy, PhantomData};
-    /// choose std or no_std to export by feature flag
     #[cfg(not(feature = "std"))]
     pub use no_stds::*;
     #[cfg(feature = "std")]
     pub use stds::*;
 }
-
-pub(crate) use prelude::*;
 
 impl<T, D: Digest, Ix: IndexType> AsRef<entry> for MrkleNode<T, D, Ix> {
     fn as_ref(&self) -> &entry {
@@ -64,7 +66,7 @@ impl<T, D: Digest, Ix: IndexType> AsRef<entry> for MrkleNode<T, D, Ix> {
     }
 }
 
-impl<T, D: Digest> Borrow<entry> for MrkleNode<T, D> {
+impl<T, D: Digest> core::borrow::Borrow<entry> for MrkleNode<T, D> {
     fn borrow(&self) -> &entry {
         self.as_ref()
     }
