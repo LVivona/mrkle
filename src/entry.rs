@@ -142,16 +142,28 @@ impl entry {
     }
 }
 
-/// **std** feature extension of the [`entry`] structure.
+/// A helper wrapper for displaying an [`entry`] as a
+/// hexadecimal string.
 ///
+/// `HexDisplay` provides a view over the raw bytes of an
+/// [`entry`], allowing them to be formatted or inspected
+/// in human-readable hexadecimal form.
+///
+/// # Examples
+/// ```
+/// use mrkle::entry;
+/// let entry = entry::from_bytes_unchecked(b"helloworld-bytes");
+/// println!("{}", entry.to_hex()); // prints the hex representation
 /// ```
 ///
-///
-/// ```
-///
+/// The `size` field specifies how many bytes from the entry
+/// are included in the display. This allows you to limit or
+/// slice the visible portion of the underlying data.
 #[must_use]
 pub struct HexDisplay<'id> {
+    /// Borrowed reference to the entry being displayed.
     inner: &'id entry,
+    /// Number of bytes to display in hexadecimal.
     size: usize,
 }
 
@@ -170,8 +182,7 @@ impl core::fmt::Display for HexDisplay<'_> {
     }
 }
 
-#[cfg(feature = "std")]
-impl std::fmt::Display for entry {
+impl core::fmt::Display for entry {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         writeln!(f, "{}", self.to_hex())
     }
