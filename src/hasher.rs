@@ -127,13 +127,13 @@ pub trait Hasher {
 /// ```rust
 /// use sha2::Sha256;
 /// use sha3::Sha3_256;
-/// use mrkle::Hasher;
+/// use mrkle::{Hasher, MrkleHasher};
 ///
 /// // Create a SHA-256 based hasher
-/// let sha256_hasher = mrkle::MrkleHasher::<Sha256>::new();
+/// let sha256_hasher = MrkleHasher::<Sha256>::new();
 ///
 /// // Create a SHA3-256 based hasher
-/// let sha3_hasher = mrkle::MrkleHasher::<Sha3_256>::new();
+/// let sha3_hasher = MrkleHasher::<Sha3_256>::new();
 ///
 /// let data = b"example data";
 /// let sha256_hash = sha256_hasher.hash(data);
@@ -142,7 +142,7 @@ pub trait Hasher {
 pub struct MrkleHasher<D: Digest> {
     /// Phantom data to maintain the generic parameter `D` without storing it.
     /// This allows the struct to be zero-sized while preserving type information.
-    _phantom: core::marker::PhantomData<D>,
+    phantom: core::marker::PhantomData<D>,
 }
 
 impl<D: Digest> Default for MrkleHasher<D> {
@@ -170,7 +170,7 @@ impl<D: Digest> MrkleHasher<D> {
     /// ```
     pub fn new() -> Self {
         MrkleHasher::<D> {
-            _phantom: core::marker::PhantomData,
+            phantom: core::marker::PhantomData,
         }
     }
 
