@@ -1,8 +1,7 @@
 use crypto::digest::Digest;
 
-use crate::error::{self, EntryError};
-use crate::tree::IndexType;
-use crate::{MrkleNode, prelude::*};
+use crate::prelude::*;
+use crate::{EntryError, IndexType, MrkleNode};
 
 /// Object that holds the bytes hashed `MrkleNode`
 /// used for reference of the array.
@@ -82,7 +81,7 @@ impl AsRef<entry> for &entry {
 }
 
 impl<'a> TryFrom<&'a [u8]> for &'a entry {
-    type Error = error::EntryError;
+    type Error = EntryError;
 
     fn try_from(value: &'a [u8]) -> Result<Self, Self::Error> {
         entry::try_from_bytes(value)
@@ -183,7 +182,7 @@ impl core::fmt::Display for HexDisplay<'_> {
 }
 
 impl core::fmt::Display for entry {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         writeln!(f, "{}", self.to_hex())
     }
 }
@@ -278,6 +277,7 @@ mod test {
     #[test]
     fn test_hex_display() {
         let digest = vec![0xde, 0xad, 0xbe, 0xef]; // Not a valid hash size, but for testing
+
         // Using from_bytes_unchecked for test
         let e = entry::from_bytes_unchecked(&digest);
 
