@@ -1,7 +1,5 @@
+use crate::NodeError;
 use crate::prelude::*;
-use crypto::digest::Digest;
-
-use crate::{Hasher, MrkleHasher, hasher::GenericArray};
 
 /// Default index type for tree nodes
 ///
@@ -17,7 +15,7 @@ pub type DefaultIx = u32;
 ///
 /// **Refrence**: https://crates.io/crates/petgraph
 pub unsafe trait IndexType:
-    Copy + Default + core::cmp::Ord + core::fmt::Debug + 'static
+    Copy + Default + core::cmp::Ord + core::cmp::PartialOrd + core::fmt::Debug + 'static
 {
     /// Construct new `IndexType` from usize.
     fn new(x: usize) -> Self;
@@ -112,9 +110,15 @@ unsafe impl IndexType for u8 {
     }
 }
 
-impl<Ix: core::fmt::Debug> core::fmt::Debug for NodeIndex<Ix> {
+impl<Ix: core::fmt::Debug + IndexType> core::fmt::Debug for NodeIndex<Ix> {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
-        write!(f, "NodeIndex({:?})", self.0)
+        write!(f, "NodeIndex({:?})", self.index())
+    }
+}
+
+impl<Ix: core::fmt::Debug + IndexType> core::fmt::Display for NodeIndex<Ix> {
+    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+        write!(f, "{:?}", self.index())
     }
 }
 
@@ -123,8 +127,8 @@ impl<Ix: core::fmt::Debug> core::fmt::Debug for NodeIndex<Ix> {
 /// Cheap indexing data type that allows for fast clone or copy.
 ///
 /// **Refrence**: https://crates.io/crates/petgraph
-#[derive(Copy, Clone, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct NodeIndex<Ix = DefaultIx>(Ix);
+#[derive(Copy, Clone, Default, PartialEq, Eq, Hash)]
+pub struct NodeIndex<Ix: IndexType>(Ix);
 
 impl<Ix: IndexType> NodeIndex<Ix> {
     /// Construct new `IndexType` from usize.
@@ -143,6 +147,46 @@ impl<Ix: IndexType> NodeIndex<Ix> {
     #[inline]
     pub fn end() -> Self {
         NodeIndex(IndexType::max())
+    }
+}
+
+impl<Ix: IndexType> Ord for NodeIndex<Ix> {
+    fn cmp(&self, other: &Self) -> core::cmp::Ordering {
+        self.index().cmp(&other.index())
+    }
+}
+
+impl<Ix: IndexType> PartialOrd for NodeIndex<Ix> {
+    fn partial_cmp(&self, other: &Self) -> Option<core::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl<Ix: IndexType> PartialOrd<usize> for NodeIndex<Ix> {
+    fn partial_cmp(&self, other: &usize) -> Option<core::cmp::Ordering> {
+        self.index().partial_cmp(other)
+    }
+
+    fn lt(&self, other: &usize) -> bool {
+        self.index() < *other
+    }
+
+    fn le(&self, other: &usize) -> bool {
+        self.index() <= *other
+    }
+
+    fn gt(&self, other: &usize) -> bool {
+        self.index() > *other
+    }
+
+    fn ge(&self, other: &usize) -> bool {
+        self.index() >= *other
+    }
+}
+
+impl<Ix: IndexType> PartialEq<usize> for NodeIndex<Ix> {
+    fn eq(&self, other: &usize) -> bool {
+        self.index() == *other
     }
 }
 
@@ -191,262 +235,146 @@ impl From<u8> for NodeIndex<u8> {
 }
 
 /// Trait for generic Node data type.
-pub trait NodeType<Ix: IndexType>: Clone {
-    /// Returns if the the current node is a leaf.
-    #[inline(always)]
-    fn is_leaf(&self) -> bool {
-        self.parent().is_some() && self.children().len() == 0
-    }
+pub trait NodeType<T, Ix: IndexType = DefaultIx> {
+    /// Return the value of the node.
+    fn value(&self) -> &T;
 
-    /// Return parent if there exist one.
+    /// Returns if the current node is a leaf (has no children).
+    fn is_leaf(&self) -> bool;
+
+    /// Returns if the current node is a root (has no parent).
+    fn is_root(&self) -> bool;
+
+    /// Return the number of children.
+    fn child_count(&self) -> usize;
+
+    /// Return parent if there exists one.
     fn parent(&self) -> Option<NodeIndex<Ix>>;
 
-    /// Return set of children within `Node`
-    fn children(&self) -> Vec<NodeIndex<Ix>>;
+    /// Return set of children within `Node`.
+    fn children(&self) -> &[NodeIndex<Ix>];
 
-    /// Return if Node contain connection to other node though `NodeIndex<Ix>`.
+    /// Return if Node contains connection to other node through `NodeIndex<Ix>`.
     fn contains(&self, node: &NodeIndex<Ix>) -> bool;
+
+    /// Return child at the specified position.
+    fn child_at(&self, index: usize) -> Option<NodeIndex<Ix>>;
+
+    /// Set the parent node to [`NodeType`].
+    fn set_parent(&mut self, parent: Option<NodeIndex<Ix>>);
+
+    /// Remove parent from [`NodeType`].
+    fn remove_parent(&mut self) -> Option<NodeIndex<Ix>>;
+
+    /// Remove child from node children.
+    fn remove(&mut self, index: NodeIndex<Ix>);
+
+    /// Push [`NodeIndex`] to [`NodeType`].
+    fn push(&mut self, index: NodeIndex<Ix>);
+
+    /// Try to push [`NodeIndex`] to [`NodeType`].
+    fn try_push(&mut self, index: NodeIndex<Ix>) -> Result<(), NodeError<Ix>>;
+
+    /// Remove all children and return children indcies [`NodeIndex`].
+    fn clear(&mut self) -> Vec<NodeIndex<Ix>>;
+
+    /// Convert leaf [`NodeType`] into parent.
+    fn into_parent(&mut self) -> Result<(), NodeError<Ix>> {
+        unimplemented!("no possible way to turn a child into a parnet.")
+    }
 }
 
-/// A generic node in a Merkle Tree.
-///
-/// [`MekrleNode`] is a our default for our [`Tree`]. It implments The
-/// [`NodeType`] trait and stores both the structural relationship
-/// and the cryptographic hash value that repersents its subtree.
-///
-/// # Example
-/// ```
-/// use mrkle::MrkleNode;
-/// use sha1::Sha1;
-///
-/// let packet = [0u8; 10];
-/// let node = MrkleNode::<_, Sha1>::leaf(packet);
-/// ```
-#[derive(Debug)]
-pub struct MrkleNode<T, D: Digest, Ix: IndexType = DefaultIx> {
-    /// The internal data of the node.
-    ///
-    ///
-    payload: Payload<T>,
-    /// The parents of this node, if any.
-    ///
-    ///
-    parent: Option<NodeIndex<Ix>>,
-    /// The children of this node.
-    ///
-    /// Dependent on the [`Tree`] if the node contains children.
-    /// The [`NodeIndex`] points to a location in [`Tree`]
-    /// buffer.
-    children: Vec<NodeIndex<Ix>>,
-    /// The cryptographic hash of this node's contents
-    ///
-    /// Produced by the [`Hasher`] trait. Leaves are derived from the
-    /// Inner data; for internal nodes, it is derived from the
-    /// hash of the children.
-    pub(crate) hash: GenericArray<D>,
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Node<T, Ix: IndexType = DefaultIx> {
+    pub value: T,
+    pub(crate) parent: Option<NodeIndex<Ix>>,
+    pub(crate) children: Vec<NodeIndex<Ix>>,
 }
 
-impl<T, D: Digest, Ix: IndexType> MrkleNode<T, D, Ix>
-where
-    T: AsRef<[u8]> + Copy,
-{
-    /// Build mekrle node with `Digest` trait.
-    #[inline]
-    pub fn leaf(payload: T) -> Self {
-        let block = Payload::Leaf(payload);
+impl<T, Ix: IndexType> Node<T, Ix> {
+    pub(crate) fn new(value: T) -> Self {
         Self {
-            payload: block,
+            value,
             parent: None,
             children: Vec::new(),
-            hash: D::digest(*block),
-        }
-    }
-
-    /// Build merkle node with [`MrkleHasher`].
-    #[inline]
-    pub fn from_hasher(payload: T, hasher: &MrkleHasher<D>) -> Self {
-        let block = Payload::Leaf(payload);
-        Self {
-            payload: block,
-            parent: None,
-            children: Vec::new(),
-            hash: hasher.hash(*block),
         }
     }
 }
 
-impl<T, D: Digest, Ix: IndexType> MrkleNode<T, D, Ix> {
-    /// Create mekrle internal node from children.
-    pub fn internal(children: Vec<NodeIndex<Ix>>, hash: GenericArray<D>) -> Self {
-        Self {
-            payload: Payload::Internal,
-            parent: None,
-            children,
-            hash,
-        }
+impl<T, Ix: IndexType> NodeType<T, Ix> for Node<T, Ix> {
+    fn value(&self) -> &T {
+        &self.value
     }
-}
 
-/// Represents the contents of a node in a Merkle tree.
-///
-/// A node can either be:
-/// - [`Payload::Leaf`] — containing the original data payload (e.g. a block, record, or chunk of bytes),
-///   which is hashed directly to form the leaf hash.
-/// - [`Payload::Internal`] — representing an internal (non-leaf) node, which does not
-///   store data directly but derives its hash from its child nodes.
-///
-/// This distinction is important for Merkle tree construction, since leaves anchor the
-/// tree with actual data, while internal nodes serve as structural parents combining
-/// child hashes.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Payload<T> {
-    /// A leaf node containing a payload value.
-    ///
-    /// The payload is typically application data (e.g. a byte buffer) that is hashed
-    /// directly to form this node’s digest.
-    Leaf(T),
-
-    /// An internal node with no direct payload.
-    ///
-    /// Its hash is derived from the hashes of its child nodes.
-    Internal,
-}
-
-impl<T> Payload<T> {
-    /// Internal Node check if Node is leaf node.
-    pub fn is_leaf(&self) -> bool {
-        match self {
-            Self::Leaf(_) => true,
-            _ => false,
-        }
+    fn is_root(&self) -> bool {
+        self.parent.is_none()
     }
-}
 
-impl<T> core::ops::Deref for Payload<T> {
-    type Target = T;
-    fn deref(&self) -> &Self::Target {
-        match self {
-            Self::Leaf(value) => value,
-            _ => panic!("Can not deref a internal node."),
-        }
-    }
-}
-
-impl<T, D: Digest, Ix: IndexType> Clone for MrkleNode<T, D, Ix>
-where
-    T: Clone,
-{
-    fn clone(&self) -> Self {
-        Self {
-            payload: self.payload.clone(),
-            parent: self.parent,
-            children: self.children.clone(),
-            hash: self.hash.clone(),
-        }
-    }
-}
-
-impl<T, D: Digest, Ix: IndexType> NodeType<Ix> for MrkleNode<T, D, Ix>
-where
-    T: Clone,
-{
     #[inline]
     fn is_leaf(&self) -> bool {
-        self.payload.is_leaf() && self.children.len() == 0
-    }
-    /// Return if `MrkelNode` has children.
-    #[inline]
-    fn children(&self) -> Vec<NodeIndex<Ix>> {
-        self.children.clone()
+        self.children.len() == 0
     }
 
-    /// Return parent index.
     #[inline]
     fn parent(&self) -> Option<NodeIndex<Ix>> {
         self.parent
     }
 
-    /// Return true if the node contains the child index.
+    #[inline]
+    fn children(&self) -> &[NodeIndex<Ix>] {
+        &self.children
+    }
+
+    #[inline]
+    fn child_count(&self) -> usize {
+        self.children.len()
+    }
+
+    fn child_at(&self, index: usize) -> Option<NodeIndex<Ix>> {
+        if let Some(&child) = self.children.get(index) {
+            return Some(child);
+        } else {
+            return None;
+        }
+    }
+
     #[inline]
     fn contains(&self, node: &NodeIndex<Ix>) -> bool {
         self.children.contains(node)
     }
+
+    #[inline(always)]
+    fn push(&mut self, index: NodeIndex<Ix>) {
+        self.try_push(index).unwrap()
+    }
+
+    #[inline]
+    fn remove(&mut self, index: NodeIndex<Ix>) {
+        if let Some(idx) = self.children.iter().position(|idx| idx == &index) {
+            self.children.swap_remove(idx);
+        }
+    }
+
+    fn set_parent(&mut self, parent: Option<NodeIndex<Ix>>) {
+        self.parent = parent;
+    }
+
+    fn remove_parent(&mut self) -> Option<NodeIndex<Ix>> {
+        self.parent.take()
+    }
+
+    fn try_push(&mut self, index: NodeIndex<Ix>) -> Result<(), NodeError<Ix>> {
+        if self.contains(&index) {
+            return Err(NodeError::Duplicate { child: index });
+        }
+        self.children.push(index);
+        return Ok(());
+    }
+
+    fn clear(&mut self) -> Vec<NodeIndex<Ix>> {
+        self.children.drain(..).collect()
+    }
 }
 
 #[cfg(test)]
-mod test {
-    use sha1::Digest;
-
-    use crate::{
-        Hasher, MrkleHasher,
-        prelude::*,
-        tree::{MrkleNode, NodeIndex, NodeType},
-    };
-
-    const DATA_PAYLOAD: [u8; 32] = [0u8; 32];
-
-    #[test]
-    fn test_is_leaf_logic() {
-        let leaf = MrkleNode::<_, sha1::Sha1>::leaf(DATA_PAYLOAD);
-        assert!(leaf.is_leaf());
-
-        let hash = MrkleHasher::<sha1::Sha1>::digest(&leaf.hash);
-        let internal = MrkleNode::<[u8; 32], sha1::Sha1>::internal(vec![NodeIndex::new(1)], hash);
-        assert!(!internal.is_leaf())
-    }
-
-    #[test]
-    fn test_default_mrkle_node() {
-        let node = MrkleNode::<_, sha1::Sha1, usize>::leaf(DATA_PAYLOAD);
-
-        let expected = sha1::Sha1::digest(DATA_PAYLOAD);
-        assert_eq!(node.hash, expected)
-    }
-
-    #[test]
-    fn test_build_with_mrkel() {
-        let hasher = MrkleHasher::<sha1::Sha1>::new();
-        let node = MrkleNode::<_, sha1::Sha1, usize>::from_hasher(DATA_PAYLOAD, &hasher);
-
-        assert_eq!(node.hash, sha1::Sha1::digest(DATA_PAYLOAD))
-    }
-
-    #[test]
-    fn test_build_internal_mrkel_node() {
-        let hasher = MrkleHasher::<sha1::Sha1>::new();
-        let node1 = MrkleNode::<_, sha1::Sha1, usize>::from_hasher(DATA_PAYLOAD, &hasher);
-        let node2 = MrkleNode::<_, sha1::Sha1, usize>::from_hasher(DATA_PAYLOAD, &hasher);
-
-        let children: Vec<NodeIndex<usize>> = vec![NodeIndex::new(0), NodeIndex::new(1)];
-
-        let hash = hasher.concat_slice(&[node1.hash, node2.hash]);
-
-        let parent: MrkleNode<[u8; 32], sha1::Sha1, usize> = MrkleNode::internal(children, hash);
-
-        // The expected hash should be just concat the two child
-        // using the same digest.
-        let expected = {
-            let mut hasher = sha1::Sha1::new();
-            hasher.update(node1.hash);
-            hasher.update(node2.hash);
-            hasher.finalize()
-        };
-
-        assert_eq!(parent.hash, expected);
-    }
-
-    #[test]
-    fn test_internal_contains_node_index() {
-        let hasher = MrkleHasher::<sha1::Sha1>::new();
-        let node1 = MrkleNode::<_, sha1::Sha1, usize>::from_hasher(DATA_PAYLOAD, &hasher);
-        let node2 = MrkleNode::<_, sha1::Sha1, usize>::from_hasher(DATA_PAYLOAD, &hasher);
-
-        let children: Vec<NodeIndex<usize>> = vec![NodeIndex::new(0), NodeIndex::new(1)];
-
-        let hash = hasher.concat_slice(&[node1.hash, node2.hash]);
-
-        let parent: MrkleNode<[u8; 32], sha1::Sha1, usize> = MrkleNode::internal(children, hash);
-
-        assert!(parent.contains(&NodeIndex::new(0)));
-    }
-}
+mod test {}

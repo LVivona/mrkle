@@ -3,11 +3,16 @@ mod borrow;
 mod iter;
 mod node;
 
-use crate::error::TreeError;
+use crate::TreeError;
 use crate::prelude::*;
+
 pub use borrow::TreeView;
-pub use iter::Iter;
-pub use node::{DefaultIx, IndexType, MrkleNode, NodeIndex, NodeType};
+pub use iter::{Iter, IterIdx};
+pub use node::{IndexType, Node, NodeIndex, NodeType};
+
+pub(crate) use node::DefaultIx;
+
+pub(crate) type DefaultNode<T, Ix = DefaultIx> = Node<T, Ix>;
 
 /// [`Tree`] is a generic hierarchical tree data structure.
 ///
@@ -19,7 +24,7 @@ pub use node::{DefaultIx, IndexType, MrkleNode, NodeIndex, NodeType};
 /// - `T`: The type of data stored in each node.
 /// - `N`: The node type, which must implement [`NodeType<T>`].
 /// - `Ix`: The index type used to address nodes in the tree.
-pub struct Tree<T, N: NodeType<Ix>, Ix: IndexType = DefaultIx> {
+pub struct Tree<T, N: NodeType<T, Ix> = DefaultNode<T>, Ix: IndexType = DefaultIx> {
     /// The index of the root node, if any.
     ///
     /// This is `None` if the tree is empty or is being built from leaves.
@@ -34,7 +39,7 @@ pub struct Tree<T, N: NodeType<Ix>, Ix: IndexType = DefaultIx> {
     phantom: PhantomData<T>,
 }
 
-impl<T, N: NodeType<Ix>, Ix: IndexType> Tree<T, N, Ix> {
+impl<T, N: NodeType<T, Ix>, Ix: IndexType> Tree<T, N, Ix> {
     /// Creates an empty tree with no nodes.
     #[inline]
     pub(crate) fn new() -> Self {
@@ -60,7 +65,7 @@ impl<T, N: NodeType<Ix>, Ix: IndexType> Tree<T, N, Ix> {
 
     /// Returns the number of nodes currently in the tree.
     #[inline]
-    pub fn length(&self) -> usize {
+    pub fn len(&self) -> usize {
         self.nodes.len()
     }
 
@@ -68,6 +73,7 @@ impl<T, N: NodeType<Ix>, Ix: IndexType> Tree<T, N, Ix> {
     ///
     /// # Panics
     /// If the tree does not have a root.
+    #[inline]
     pub fn root(&self) -> &N {
         self.try_root().unwrap()
     }
@@ -88,6 +94,14 @@ impl<T, N: NodeType<Ix>, Ix: IndexType> Tree<T, N, Ix> {
         }
     }
 
+    /// Push nodes onto [`Tree`] node list without connection.
+    ///
+    /// Return there [`NodeIndex`] within the tree
+    pub fn push(&mut self, node: N) -> NodeIndex<Ix> {
+        self.nodes.push(node);
+        NodeIndex::new(self.nodes.len())
+    }
+
     ///Return root [`TreeView`] of the [`Tree`]
     pub fn view(&self) -> TreeView<'_, T, N, Ix> {
         TreeView::from(self)
@@ -96,12 +110,21 @@ impl<T, N: NodeType<Ix>, Ix: IndexType> Tree<T, N, Ix> {
     /// Returns `true` if the tree contains no nodes.
     #[inline]
     pub fn is_empty(&self) -> bool {
-        self.length() == 0
+        self.len() == 0
     }
 
-    /// Returns Iterator pattern [`Iter`].
+    /// Returns Iterator pattern [`Iter`] which returns a
+    /// unmutable Node reference.
+    #[inline]
     pub fn iter(&self) -> Iter<'_, T, N, Ix> {
-        Iter::new(&self)
+        self.view().iter()
+    }
+
+    /// Returns Iterator pattern [`IterIdx`] which returns a
+    /// [`NodeIndex<Ix>`] of the node.
+    #[inline]
+    pub fn iter_idx(&self) -> IterIdx<'_, T, N, Ix> {
+        self.view().iter_idx()
     }
 
     /// Create a [`TreeView`] from a specific node as root.
@@ -111,10 +134,11 @@ impl<T, N: NodeType<Ix>, Ix: IndexType> Tree<T, N, Ix> {
             return None;
         }
 
-        let root_node = &self.nodes[root.index()];
-        let mut nodes: Vec<(NodeIndex<Ix>, &N)> = vec![(root, root_node)];
+        let node = &self.nodes[root.index()];
+        let mut nodes: Vec<(NodeIndex<Ix>, &N)> = vec![(root, node)];
 
-        // BFS to collect all nodes in the subtree
+        // Breath-First-Search (BFS) to collect all nodes in the subtree.
+        // to add it into [`TreeView`].
         let mut queue: VecDeque<NodeIndex<Ix>> = VecDeque::from(vec![root]);
 
         while let Some(current_idx) = queue.pop_front() {
@@ -123,8 +147,8 @@ impl<T, N: NodeType<Ix>, Ix: IndexType> Tree<T, N, Ix> {
             for child_idx in current_node.children() {
                 if child_idx.index() < self.nodes.len() {
                     let child_node = &self.nodes[child_idx.index()];
-                    nodes.push((child_idx, child_node));
-                    queue.push_back(child_idx);
+                    nodes.push((*child_idx, child_node));
+                    queue.push_back(*child_idx);
                 }
             }
         }
@@ -132,88 +156,47 @@ impl<T, N: NodeType<Ix>, Ix: IndexType> Tree<T, N, Ix> {
         Some(TreeView::new(root, nodes))
     }
 
-    /// Create a [`TreeView`] from a node reference.
+    /// Create a [`TreeView`] from a node reference if found,
+    /// else return None.
     pub fn subtree_from_node(&self, target: &N) -> Option<TreeView<T, N, Ix>>
     where
-        N: PartialEq,
+        N: PartialEq + Eq,
     {
         // Find the index of the target node
-        for (idx, node) in self.nodes.iter().enumerate() {
-            if node == target {
-                return self.subtree_view(NodeIndex::new(idx));
+        for idx in IterIdx::new(self.view()) {
+            if &self.nodes[idx.index()] == target {
+                return self.subtree_view(idx);
             }
         }
         None
     }
 }
 
-impl<T, N: NodeType<Ix>, Ix: IndexType> Default for Tree<T, N, Ix> {
+impl<T, N: NodeType<T, Ix>, Ix: IndexType> Default for Tree<T, N, Ix> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<'a, T, N: NodeType<Ix>, Ix: IndexType> IntoIterator for &'a Tree<T, N, Ix> {
+impl<'a, T, N: NodeType<T, Ix>, Ix: IndexType> IntoIterator for &'a Tree<T, N, Ix> {
     type IntoIter = Iter<'a, T, N, Ix>;
     type Item = &'a N;
 
     fn into_iter(self) -> Self::IntoIter {
-        Iter::new(self)
+        self.iter()
     }
 }
 
 #[cfg(test)]
 mod test {
 
-    use crate::{DefaultIx, prelude::*};
-    use crate::{IndexType, NodeType, Tree, tree::NodeIndex};
-
-    #[derive(Debug, Clone, PartialEq, Eq)]
-    pub(crate) struct Node<T, Ix: IndexType = DefaultIx>
-    where
-        T: Clone,
-    {
-        pub(crate) value: T,
-        pub(crate) parent: Option<NodeIndex<Ix>>,
-        pub(crate) children: Vec<NodeIndex<Ix>>,
-    }
-
-    impl<T, Ix: IndexType> Node<T, Ix>
-    where
-        T: Clone,
-    {
-        pub(crate) fn new(value: T) -> Self {
-            Self {
-                value,
-                parent: None,
-                children: Vec::new(),
-            }
-        }
-    }
-
-    impl<T, Ix: IndexType> NodeType<Ix> for Node<T, Ix>
-    where
-        T: Clone,
-    {
-        fn is_leaf(&self) -> bool {
-            self.children.len() == 0
-        }
-        fn children(&self) -> Vec<NodeIndex<Ix>> {
-            self.children.clone()
-        }
-
-        fn contains(&self, node: &NodeIndex<Ix>) -> bool {
-            self.children.contains(node)
-        }
-
-        fn parent(&self) -> Option<NodeIndex<Ix>> {
-            self.parent
-        }
-    }
+    use super::Node;
+    use crate::prelude::*;
+    use crate::{NodeIndex, Tree};
 
     #[test]
     fn test_empty_tree_construction() {
-        let tree: Tree<u8, Node<u8>> = Tree::new();
+        let tree: Tree<u8> = Tree::new();
         assert!(tree.is_empty())
     }
 
@@ -221,7 +204,7 @@ mod test {
     fn test_tree_iter() {
         let mut root: Node<String> = Node::new("hello".to_string());
         root.children = vec![NodeIndex::new(1), NodeIndex::new(2)];
-        let mut tree: Tree<String, Node<String>> = Tree::new();
+        let mut tree: Tree<String> = Tree::new();
         tree.root = Some(NodeIndex::new(0));
         tree.nodes.push(root);
         tree.nodes.push(Node::new("world".to_string()));
@@ -248,7 +231,7 @@ mod test {
     fn test_tree_subtree() {
         let mut root: Node<String> = Node::new("hello".to_string());
         root.children = vec![NodeIndex::new(1), NodeIndex::new(2)];
-        let mut tree: Tree<String, Node<String>> = Tree::new();
+        let mut tree: Tree<String> = Tree::new();
         tree.root = Some(NodeIndex::new(0));
         tree.nodes.push(root);
         tree.nodes.push(Node::new("world".to_string()));
@@ -257,5 +240,25 @@ mod test {
         let subtree = tree.subtree_view(NodeIndex::new(1)).unwrap();
         assert!(subtree.len() == 1);
         assert!(subtree.root() == &tree.nodes[1]);
+    }
+
+    #[test]
+    fn test_tree_subtree_unordered() {
+        let mut root: Node<String> = Node::new("hello".to_string());
+        root.children = vec![NodeIndex::new(0), NodeIndex::new(1)];
+        let mut tree: Tree<String> = Tree::new();
+        let n1 = Node::new("world".to_string());
+        let n2 = Node::new("!".to_string());
+        tree.root = Some(NodeIndex::new(2));
+        tree.nodes.push(n1.clone());
+        tree.nodes.push(n2);
+        tree.nodes.push(root);
+
+        let subtree = tree.subtree_from_node(&n1);
+        assert!(subtree.is_some());
+        if let Some(s) = subtree {
+            assert!(s.len() == 1);
+            assert!(s.root() == &tree.nodes[0]);
+        }
     }
 }
