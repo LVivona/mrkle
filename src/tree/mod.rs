@@ -8,11 +8,9 @@ use crate::prelude::*;
 
 pub use borrow::TreeView;
 pub use iter::{Iter, IterIdx};
-pub use node::{IndexType, Node, NodeIndex, NodeType};
+pub use node::{BasicNode, IndexType, Node, NodeIndex};
 
 pub(crate) use node::DefaultIx;
-
-pub(crate) type DefaultNode<T, Ix = DefaultIx> = Node<T, Ix>;
 
 /// [`Tree`] is a generic hierarchical tree data structure.
 ///
@@ -22,9 +20,9 @@ pub(crate) type DefaultNode<T, Ix = DefaultIx> = Node<T, Ix>;
 ///
 /// # Type parameters
 /// - `T`: The type of data stored in each node.
-/// - `N`: The node type, which must implement [`NodeType<T>`].
+/// - `N`: The node type, which must implement [`Node<T>`].
 /// - `Ix`: The index type used to address nodes in the tree.
-pub struct Tree<T, N: NodeType<T, Ix> = DefaultNode<T>, Ix: IndexType = DefaultIx> {
+pub struct Tree<T, N = BasicNode<T>, Ix: IndexType = DefaultIx> {
     /// The index of the root node, if any.
     ///
     /// This is `None` if the tree is empty or is being built from leaves.
@@ -39,7 +37,7 @@ pub struct Tree<T, N: NodeType<T, Ix> = DefaultNode<T>, Ix: IndexType = DefaultI
     phantom: PhantomData<T>,
 }
 
-impl<T, N: NodeType<T, Ix>, Ix: IndexType> Tree<T, N, Ix> {
+impl<T, N: Node<T, Ix>, Ix: IndexType> Tree<T, N, Ix> {
     /// Creates an empty tree with no nodes.
     #[inline]
     pub(crate) fn new() -> Self {
@@ -128,7 +126,7 @@ impl<T, N: NodeType<T, Ix>, Ix: IndexType> Tree<T, N, Ix> {
     }
 
     /// Create a [`TreeView`] from a specific node as root.
-    pub fn subtree_view(&self, root: NodeIndex<Ix>) -> Option<TreeView<T, N, Ix>> {
+    pub fn subtree_view(&self, root: NodeIndex<Ix>) -> Option<TreeView<'_, T, N, Ix>> {
         // Check if the node exists
         if root.index() >= self.nodes.len() {
             return None;
@@ -158,7 +156,7 @@ impl<T, N: NodeType<T, Ix>, Ix: IndexType> Tree<T, N, Ix> {
 
     /// Create a [`TreeView`] from a node reference if found,
     /// else return None.
-    pub fn subtree_from_node(&self, target: &N) -> Option<TreeView<T, N, Ix>>
+    pub fn subtree_from_node(&self, target: &N) -> Option<TreeView<'_, T, N, Ix>>
     where
         N: PartialEq + Eq,
     {
@@ -172,13 +170,13 @@ impl<T, N: NodeType<T, Ix>, Ix: IndexType> Tree<T, N, Ix> {
     }
 }
 
-impl<T, N: NodeType<T, Ix>, Ix: IndexType> Default for Tree<T, N, Ix> {
+impl<T, N: Node<T, Ix>, Ix: IndexType> Default for Tree<T, N, Ix> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<'a, T, N: NodeType<T, Ix>, Ix: IndexType> IntoIterator for &'a Tree<T, N, Ix> {
+impl<'a, T, N: Node<T, Ix>, Ix: IndexType> IntoIterator for &'a Tree<T, N, Ix> {
     type IntoIter = Iter<'a, T, N, Ix>;
     type Item = &'a N;
 
@@ -190,7 +188,7 @@ impl<'a, T, N: NodeType<T, Ix>, Ix: IndexType> IntoIterator for &'a Tree<T, N, I
 #[cfg(test)]
 mod test {
 
-    use super::Node;
+    use super::BasicNode as Node;
     use crate::prelude::*;
     use crate::{NodeIndex, Tree};
 

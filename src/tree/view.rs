@@ -1,4 +1,4 @@
-use super::{DefaultIx, IndexType, Iter, IterIdx, NodeIndex, NodeType, Tree};
+use super::{DefaultIx, IndexType, Iter, IterIdx, Node, NodeIndex, Tree};
 use crate::prelude::*;
 
 /// [`TreeView`] is a view into the hierachical of [`Tree`].
@@ -6,7 +6,7 @@ use crate::prelude::*;
 /// It a borrowed store of a sub-tree containing nodes connected
 /// in a parent-child relationship. Similarly to the [`Tree`].
 #[derive(Debug)]
-pub struct TreeView<'s, T, N: NodeType<T, Ix>, Ix: IndexType = DefaultIx> {
+pub struct TreeView<'s, T, N: Node<T, Ix>, Ix: IndexType = DefaultIx> {
     /// The index of the root.
     pub(crate) root: NodeIndex<Ix>,
     /// Collection of all node spaning from the root.
@@ -15,20 +15,17 @@ pub struct TreeView<'s, T, N: NodeType<T, Ix>, Ix: IndexType = DefaultIx> {
     phantom: PhantomData<T>,
 }
 
-impl<'s, T, N: NodeType<T, Ix>, Ix: IndexType> TreeView<'s, T, N, Ix> {
+impl<'s, T, N: Node<T, Ix>, Ix: IndexType> TreeView<'s, T, N, Ix> {
     /// Create an view of the [`Tree`].
     pub(crate) fn new(root: NodeIndex<Ix>, nodes: Vec<(NodeIndex<Ix>, &'s N)>) -> Self {
         Self {
-            root: root,
-            nodes: nodes
-                .iter()
-                .map(|(idx, node)| (idx.clone(), *node))
-                .collect(),
+            root,
+            nodes: nodes.iter().map(|(idx, node)| (*idx, *node)).collect(),
             phantom: PhantomData,
         }
     }
 
-    /// Returns the refrence to the [`NodeType`].
+    /// Returns the refrence to the [`Node`].
     pub fn root(&self) -> &'s N {
         self.nodes.get(&self.root).unwrap()
     }
@@ -57,7 +54,7 @@ impl<'s, T, N: NodeType<T, Ix>, Ix: IndexType> TreeView<'s, T, N, Ix> {
     /// Returns Iterator pattern [`Iter`] which returns a
     /// unmutable Node reference.
     pub fn iter(self) -> Iter<'s, T, N, Ix> {
-        self.into_iter()
+        Iter::new(self)
     }
 
     /// Returns Iterator pattern [`IterIdx`] which returns a
@@ -67,7 +64,7 @@ impl<'s, T, N: NodeType<T, Ix>, Ix: IndexType> TreeView<'s, T, N, Ix> {
     }
 }
 
-impl<'s, T, N: NodeType<T, Ix>, Ix: IndexType> From<&'s Tree<T, N, Ix>> for TreeView<'s, T, N, Ix> {
+impl<'s, T, N: Node<T, Ix>, Ix: IndexType> From<&'s Tree<T, N, Ix>> for TreeView<'s, T, N, Ix> {
     fn from(value: &'s Tree<T, N, Ix>) -> Self {
         let root = value.root.unwrap();
         let root_node: &N = &value.nodes[root.index()];
@@ -88,11 +85,11 @@ impl<'s, T, N: NodeType<T, Ix>, Ix: IndexType> From<&'s Tree<T, N, Ix>> for Tree
     }
 }
 
-impl<'s, T, N: NodeType<T, Ix>, Ix: IndexType> IntoIterator for TreeView<'s, T, N, Ix> {
+impl<'s, T, N: Node<T, Ix>, Ix: IndexType> IntoIterator for TreeView<'s, T, N, Ix> {
     type IntoIter = Iter<'s, T, N, Ix>;
     type Item = &'s N;
     fn into_iter(self) -> Self::IntoIter {
-        Iter::new(self)
+        self.iter()
     }
 }
 
@@ -100,7 +97,7 @@ impl<'s, T, N: NodeType<T, Ix>, Ix: IndexType> IntoIterator for TreeView<'s, T, 
 mod test {
 
     use crate::prelude::*;
-    use crate::{NodeIndex, Tree, tree::Node};
+    use crate::{NodeIndex, Tree, tree::BasicNode as Node};
 
     #[test]
     fn test_tree_view_construction() {
@@ -117,6 +114,6 @@ mod test {
         let view = tree.view();
         let node = view.root();
 
-        assert!(node.value == String::from("hello"),)
+        assert!(node == &tree.nodes[0])
     }
 }

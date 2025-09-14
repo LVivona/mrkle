@@ -1,7 +1,7 @@
 use crate::prelude::*;
 use core::iter::Iterator;
 
-use crate::{IndexType, NodeIndex, NodeType, TreeView};
+use crate::{IndexType, Node, NodeIndex, TreeView};
 
 /*
  * TODO:
@@ -15,7 +15,7 @@ use crate::{IndexType, NodeIndex, NodeType, TreeView};
 ///
 /// This `struct` is created by the `into_iter` method on [`TreeView`]
 /// (provided by the [`IntoIterator`] trait).
-pub struct Iter<'a, T, N: NodeType<T, Ix>, Ix: IndexType> {
+pub struct Iter<'a, T, N: Node<T, Ix>, Ix: IndexType> {
     /// internal queue for node reterival.
     queue: VecDeque<NodeIndex<Ix>>,
     /// [`Tree`] reference.
@@ -25,7 +25,7 @@ pub struct Iter<'a, T, N: NodeType<T, Ix>, Ix: IndexType> {
     stop: bool,
 }
 
-impl<'a, T, N: NodeType<T, Ix>, Ix: IndexType> Iter<'a, T, N, Ix> {
+impl<'a, T, N: Node<T, Ix>, Ix: IndexType> Iter<'a, T, N, Ix> {
     pub(crate) fn new(tree: TreeView<'a, T, N, Ix>) -> Self {
         Self {
             queue: VecDeque::from([]),
@@ -35,36 +35,35 @@ impl<'a, T, N: NodeType<T, Ix>, Ix: IndexType> Iter<'a, T, N, Ix> {
     }
 }
 
-impl<'a, T, N: NodeType<T, Ix>, Ix: IndexType> Iterator for Iter<'a, T, N, Ix> {
+impl<'a, T, N: Node<T, Ix>, Ix: IndexType> Iterator for Iter<'a, T, N, Ix> {
     type Item = &'a N;
     fn next(&mut self) -> Option<Self::Item> {
         if let Some(index) = &self.queue.pop_front() {
-            let node = self.inner.get(&index)?;
+            let node = self.inner.get(index)?;
             if !node.is_leaf() {
                 self.queue.extend(node.children());
             }
             return Some(node);
+        }
+        if self.inner.is_empty() || self.stop {
+            None
         } else {
-            if self.inner.is_empty() || self.stop {
-                return None;
-            } else {
-                let root = self.inner.root();
-                self.queue.extend(root.children());
-                self.stop = true;
-                return Some(root);
-            }
+            let root = self.inner.root();
+            self.queue.extend(root.children());
+            self.stop = true;
+            Some(root)
         }
     }
 }
 
 /// An iterator that moves Nodes Index out of a [`TreeView`].
-pub struct IterIdx<'a, T, N: NodeType<T, Ix>, Ix: IndexType> {
+pub struct IterIdx<'a, T, N: Node<T, Ix>, Ix: IndexType> {
     queue: VecDeque<NodeIndex<Ix>>,
     inner: TreeView<'a, T, N, Ix>,
     stop: bool,
 }
 
-impl<'a, T, N: NodeType<T, Ix>, Ix: IndexType> IterIdx<'a, T, N, Ix> {
+impl<'a, T, N: Node<T, Ix>, Ix: IndexType> IterIdx<'a, T, N, Ix> {
     pub(crate) fn new(tree: TreeView<'a, T, N, Ix>) -> Self {
         Self {
             queue: VecDeque::from([]),
@@ -74,24 +73,24 @@ impl<'a, T, N: NodeType<T, Ix>, Ix: IndexType> IterIdx<'a, T, N, Ix> {
     }
 }
 
-impl<'a, T, N: NodeType<T, Ix>, Ix: IndexType> Iterator for IterIdx<'a, T, N, Ix> {
+impl<T, N: Node<T, Ix>, Ix: IndexType> Iterator for IterIdx<'_, T, N, Ix> {
     type Item = NodeIndex<Ix>;
     fn next(&mut self) -> Option<Self::Item> {
         if let Some(index) = &self.queue.pop_front() {
-            let node = self.inner.get(&index)?;
+            let node = self.inner.get(index)?;
             if !node.is_leaf() {
                 self.queue.extend(node.children());
             }
-            return Some(*index);
+            Some(*index)
         } else {
             // Possible stop cases where Iterator ends.
             if self.inner.is_empty() || self.stop {
-                return None;
+                None
             } else {
                 let root = self.inner.root();
                 self.queue.extend(root.children());
                 self.stop = true;
-                return Some(self.inner.root);
+                Some(self.inner.root)
             }
         }
     }

@@ -19,7 +19,7 @@ pub mod hasher;
 
 /// Core tree structures and nodes for the Merkle tree implementation.
 ///
-/// This module contains [`MrkleNode`], [`Tree`], and the [`NodeType`] trait.
+/// This module contains [`MrkleNode`], [`Tree`], and the [`Node`] trait.
 pub(crate) mod tree;
 
 /// Error types for the Merkle tree crate.
@@ -31,7 +31,7 @@ pub(crate) use crate::error::{EntryError, NodeError, TreeError};
 pub(crate) use crate::tree::DefaultIx;
 
 pub use crate::hasher::{GenericArray, Hasher, MrkleHasher};
-pub use crate::tree::{IndexType, NodeIndex, NodeType, Tree, TreeView};
+pub use crate::tree::{IndexType, Iter, IterIdx, Node, NodeIndex, Tree, TreeView};
 pub use borrowed::*;
 
 use crypto::digest::Digest;
@@ -65,10 +65,10 @@ pub(crate) mod prelude {
 
 use prelude::*;
 
-/// A generic node in a Merkle Tree.
+/// A generic immutable node in a Merkle Tree.
 ///
 /// [`MekrleNode`] is a our default for our [`Tree`]. It implments The
-/// [`NodeType`] trait and stores both the structural relationship
+/// [`Node`] trait and stores both the structural relationship
 /// and the cryptographic hash value that repersents its subtree.
 ///
 /// # Example
@@ -76,6 +76,7 @@ use prelude::*;
 /// use mrkle::MrkleNode;
 /// use sha1::Sha1;
 ///
+/// // data packet payload
 /// let packet = [0u8; 10];
 /// let node = MrkleNode::<_, Sha1>::leaf(packet);
 /// ```
@@ -103,38 +104,219 @@ pub struct MrkleNode<T, D: Digest, Ix: IndexType = DefaultIx> {
     pub(crate) hash: GenericArray<D>,
 }
 
+impl<T, D: Digest, Ix: IndexType> Eq for MrkleNode<T, D, Ix> {}
+
 impl<T, D: Digest, Ix: IndexType> MrkleNode<T, D, Ix>
 where
-    T: AsRef<[u8]> + Copy,
+    T: AsRef<[u8]>,
 {
-    /// Build mekrle node with `Digest` trait.
+    /// Creates a new leaf node with the given payload.
+    ///
+    /// This method constructs a leaf node by computing the cryptographic hash
+    /// of the payload using the digest algorithm `D`. The resulting node has
+    /// no parent or children and represents a terminal node in the Merkle tree.
+    ///
+    /// # Arguments
+    ///
+    /// * `payload` - The data to store in this leaf node. Must implement [`AsRef<[u8]>`]
+    ///   to allow hashing of the underlying bytes.
+    ///
+    /// # Returns
+    ///
+    /// A new [`MrkleNode`] configured as a leaf node with the computed hash.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use mrkle::{MrkleNode, Node};
+    /// use sha2::Sha256;
+    ///
+    /// let data = b"Hello, world!";
+    /// let leaf = MrkleNode::<_, Sha256>::leaf(*data);
+    /// assert!(leaf.is_leaf());
+    /// ```
+    ///
+    /// # Performance
+    ///
+    /// This method performs one hash computation using the specified digest algorithm.
     #[inline]
     pub fn leaf(payload: T) -> Self {
-        let block = Payload::Leaf(payload);
+        let hash = D::digest(&payload);
+        let payload = Payload::Leaf(payload);
         Self {
-            payload: block,
+            payload,
+            hash,
             parent: None,
-            children: Vec::new(),
-            hash: D::digest(*block),
+            children: Vec::with_capacity(0),
         }
     }
 
-    /// Build merkle node with [`MrkleHasher`].
-    #[inline]
-    pub fn from_hasher(payload: T, hasher: &MrkleHasher<D>) -> Self {
-        let block = Payload::Leaf(payload);
+    /// Creates a new leaf node with a pre-computed hash.
+    ///
+    /// This method allows creation of a leaf node when the hash has already been
+    /// computed externally. The method verifies that the provided hash matches
+    /// the hash of the payload data to ensure integrity.
+    ///
+    /// # Arguments
+    ///
+    /// * `payload` - The data to store in this leaf node
+    /// * `hash` - The pre-computed cryptographic hash of the payload
+    ///
+    /// # Returns
+    ///
+    /// A new [`MrkleNode`] configured as a leaf node with the provided hash.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the provided `hash` does not match the digest of the `payload`.
+    /// This verification ensures the integrity of the Merkle tree structure.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use mrkle::{MrkleNode, Node};
+    /// use sha2::{Sha256, Digest};
+    ///
+    /// let data = b"Hello, world!";
+    /// let hash = Sha256::digest(data);
+    /// let leaf = MrkleNode::<_, Sha256>::leaf_with_hash(*data, hash);
+    /// assert!(leaf.is_leaf());
+    /// ```
+    ///
+    /// ```rust,should_panic
+    /// use mrkle::MrkleNode;
+    /// use sha2::{Sha256, Digest};
+    ///
+    /// let data = b"Hello, world!";
+    /// let wrong_hash = Sha256::digest(b"Different data");
+    /// // This will panic due to hash mismatch
+    /// let leaf = MrkleNode::<_, Sha256>::leaf_with_hash(*data, wrong_hash);
+    /// ```
+    ///
+    /// # Security Considerations
+    ///
+    /// This method performs hash verification to prevent malicious or accidental
+    /// corruption of the tree structure. Always ensure the hash is computed from
+    /// the exact same payload data.
+    pub fn leaf_with_hash(payload: T, hash: GenericArray<D>) -> Self {
+        /// Helper function to provide better panic messages for hash mismatches.
+        ///
+        /// This function is marked with `#[cold]` to optimize for the common case
+        /// where hashes match correctly.
+        #[cold]
+        #[inline(never)]
+        fn assert_hash_digest<D: Digest>(value: &GenericArray<D>) {
+            panic!(
+                "Hash verification failed: provided hash {value:?} does not match \
+                     the computed digest of the payload data. This indicates either \
+                     corrupted data or an incorrect hash value."
+            );
+        }
+
+        if D::digest(&payload) != hash {
+            assert_hash_digest::<D>(&hash);
+        }
+
+        let payload = Payload::Leaf(payload);
         Self {
-            payload: block,
+            payload,
+            hash,
             parent: None,
-            children: Vec::new(),
-            hash: hasher.hash(*block),
+            children: Vec::with_capacity(0),
         }
     }
-}
 
-impl<T, D: Digest, Ix: IndexType> MrkleNode<T, D, Ix> {
-    /// Create mekrle internal node from children.
-    pub fn internal(children: Vec<NodeIndex<Ix>>, hash: GenericArray<D>) -> Self {
+    /// Creates a new leaf node using a custom hasher instance.
+    ///
+    /// This method allows the use of a specialized [`MrkleHasher`] that may have
+    /// custom configuration or state. This is useful when you need consistent
+    /// hashing behavior across multiple nodes or when using hasher-specific features.
+    ///
+    /// # Arguments
+    ///
+    /// * `payload` - The data to store in this leaf node
+    /// * `hasher` - A reference to a [`MrkleHasher`] instance to compute the hash
+    ///
+    /// # Returns
+    ///
+    /// A new [`MrkleNode`] configured as a leaf node with hash computed by the hasher.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use mrkle::{MrkleNode, MrkleHasher, Node};
+    /// use sha2::Sha256;
+    ///
+    /// let data = b"Hello, world!";
+    /// let hasher = MrkleHasher::<Sha256>::new();
+    /// let leaf = MrkleNode::<_, Sha256>::leaf_with_hasher(*data, &hasher);
+    /// assert!(leaf.is_leaf());
+    /// ```
+    ///
+    /// # Use Cases
+    ///
+    /// - Custom hash computation with specialized parameters
+    /// - Consistent hashing across multiple nodes
+    /// - Integration with existing hasher instances
+    /// - Performance optimization through hasher reuse
+    pub fn leaf_with_hasher(payload: T, hasher: &MrkleHasher<D>) -> Self {
+        let hash = hasher.hash(&payload);
+        let payload = Payload::Leaf(payload);
+        Self {
+            payload,
+            hash,
+            parent: None,
+            children: Vec::with_capacity(0),
+        }
+    }
+
+    /// Creates a new internal (non-leaf) node with the specified children and hash.
+    ///
+    /// Internal nodes represent the structural components of the Merkle tree that
+    /// combine child node hashes. They do not store application data directly
+    /// but serve as cryptographic proofs of their subtree contents.
+    ///
+    /// # Arguments
+    ///
+    /// * `children` - A vector of [`NodeIndex`] references pointing to child nodes
+    /// * `hash` - The cryptographic hash computed from the child node hashes
+    ///
+    /// # Returns
+    ///
+    /// A new [`MrkleNode`] configured as an internal node.
+    ///
+    /// # Examples
+    ///
+    /// ```rust ignore
+    /// use mrkle::{MrkleNode, NodeIndex, Node};
+    /// use sha2::Sha256;
+    ///
+    /// // Create child nodes first
+    /// let child1 = MrkleNode::<Vec<u8>, Sha256>::leaf(b"data1".to_vec());
+    /// let child2 = MrkleNode::<Vec<u8>, Sha256>::leaf(b"data2".to_vec());
+    ///
+    /// // Compute combined hash of children
+    /// let mut hasher = Sha256::new();
+    /// hasher.update(&child1.hash);
+    /// hasher.update(&child2.hash);
+    /// let combined_hash = hasher.finalize();
+    ///
+    /// let children = vec![NodeIndex::new(0), NodeIndex::new(1)];
+    /// let internal = MrkleNode::<Vec<u8>, Sha256>::internal(children, combined_hash);
+    /// assert!(!internal.is_leaf());
+    /// ```
+    ///
+    /// # Security Notes
+    ///
+    /// - The hash should be computed from the concatenation or combination of child hashes
+    /// - The order of children affects the final hash and tree structure
+    /// - This method does not verify the hash against the children for performance reasons
+    ///
+    /// # Visibility
+    ///
+    /// This method is `pub(crate)` as internal node creation should typically be
+    /// managed by the tree construction algorithms rather than external users.
+    pub(crate) fn internal(children: Vec<NodeIndex<Ix>>, hash: GenericArray<D>) -> Self {
         Self {
             payload: Payload::Internal,
             parent: None,
@@ -171,11 +353,9 @@ pub enum Payload<T> {
 
 impl<T> Payload<T> {
     /// Internal Node check if Node is leaf node.
+    #[inline]
     pub fn is_leaf(&self) -> bool {
-        match self {
-            Self::Leaf(_) => true,
-            _ => false,
-        }
+        matches!(self, Self::Leaf(_))
     }
 }
 
@@ -186,6 +366,13 @@ impl<T> core::ops::Deref for Payload<T> {
             Self::Leaf(value) => value,
             _ => panic!("Can not deref a internal node."),
         }
+    }
+}
+
+/// Since the object is immutable we only need to compare the hashes.
+impl<T, D: Digest, Ix: IndexType> PartialEq for MrkleNode<T, D, Ix> {
+    fn eq(&self, other: &Self) -> bool {
+        self.hash == other.hash
     }
 }
 
@@ -203,9 +390,9 @@ where
     }
 }
 
-impl<T, D: Digest, Ix: IndexType> NodeType<T, Ix> for MrkleNode<T, D, Ix> {
-    fn value(&self) -> &T {
-        &self.payload
+impl<T, D: Digest, Ix: IndexType> Node<T, Ix> for MrkleNode<T, D, Ix> {
+    fn value(&self) -> Option<&T> {
+        Some(&self.payload)
     }
 
     fn is_root(&self) -> bool {
@@ -214,7 +401,7 @@ impl<T, D: Digest, Ix: IndexType> NodeType<T, Ix> for MrkleNode<T, D, Ix> {
 
     #[inline]
     fn is_leaf(&self) -> bool {
-        self.payload.is_leaf() && self.children.len() == 0
+        self.payload.is_leaf() && self.children.is_empty()
     }
 
     #[inline]
@@ -235,46 +422,13 @@ impl<T, D: Digest, Ix: IndexType> NodeType<T, Ix> for MrkleNode<T, D, Ix> {
     fn child_at(&self, index: usize) -> Option<NodeIndex<Ix>> {
         if let Some(&child) = self.children.get(index) {
             return Some(child);
-        } else {
-            return None;
         }
+        None
     }
 
     #[inline]
     fn contains(&self, node: &NodeIndex<Ix>) -> bool {
         self.children.contains(node)
-    }
-
-    #[inline(always)]
-    fn push(&mut self, index: NodeIndex<Ix>) {
-        self.try_push(index).unwrap()
-    }
-
-    #[inline]
-    fn remove(&mut self, index: NodeIndex<Ix>) {
-        if let Some(idx) = self.children.iter().position(|idx| idx == &index) {
-            self.children.swap_remove(idx);
-        }
-    }
-
-    fn set_parent(&mut self, parent: Option<NodeIndex<Ix>>) {
-        self.parent = parent;
-    }
-
-    fn remove_parent(&mut self) -> Option<NodeIndex<Ix>> {
-        self.parent.take()
-    }
-
-    fn try_push(&mut self, index: NodeIndex<Ix>) -> Result<(), NodeError<Ix>> {
-        if self.contains(&index) {
-            return Err(error::NodeError::Duplicate { child: index });
-        }
-        self.children.push(index);
-        return Ok(());
-    }
-
-    fn clear(&mut self) -> Vec<NodeIndex<Ix>> {
-        self.children.drain(..).collect()
     }
 }
 
@@ -284,21 +438,50 @@ impl<T, D: Digest, Ix: IndexType> AsRef<entry> for MrkleNode<T, D, Ix> {
     }
 }
 
+impl<T, D: Digest, Ix: IndexType> AsRef<[u8]> for MrkleNode<T, D, Ix> {
+    fn as_ref(&self) -> &[u8] {
+        &self.hash
+    }
+}
+
 impl<T, D: Digest> core::borrow::Borrow<entry> for MrkleNode<T, D> {
     fn borrow(&self) -> &entry {
         self.as_ref()
     }
 }
 
-/// A wrapper around the [`Tree`] data structure.
-/// [`MrkleTree`] (short for *Merkle Tree*) is a cryptographic immutable hash tree
-/// used as the foundation for data validation.
+/// A cryptographic hash tree data structure.
 ///
-/// Merkle Trees enable efficient verification of data integrity, ensuring
-/// that each `T` (data block) can be confirmed as received without
-/// corruption or tampering.
+/// A `MrkleNode` is a generic tree data structure where each leaf node represents a data block and each
+/// internal node contains a cryptographic hash of its children. This structure enables
+/// efficient and secure verification of large data structures.
+///
+/// The tree provides verification of any element's inclusion and integrity
+/// without requiring the entire dataset. This makes Merkle trees particularly useful
+/// for distributed systems, blockchain technologies, and data integrity verification.
+///
+///
+/// # Type Parameters
+///
+/// * `T` - The type of data stored in leaf nodes
+/// * `D` - The digest algorithm implementing [`Digest`] trait (e.g., SHA-256)
+/// * `Ix` - The index type for node references, defaults to [`DefaultIx`]
+///
+///
+/// # Security Considerations
+///
+/// The security of a `MrkleTree` depends entirely on the cryptographic strength
+/// of the chosen digest algorithm `D`. Using weak or broken hash functions
+/// compromises the tree's integrity guarantees.
+///
+/// [`Digest`]: digest::Digest
+/// [`DefaultIx`]: petgraph::graph::DefaultIx
 pub struct MrkleTree<T, D: Digest, Ix: IndexType = DefaultIx> {
-    /// The underlying tree storing nodes
+    /// The underlying tree data structure.
+    ///
+    /// This field is private to maintain invariants about the tree structure
+    /// and ensure all modifications go through the proper cryptographic
+    /// verification process.
     core: Tree<T, MrkleNode<T, D, Ix>, Ix>,
 }
 
@@ -309,18 +492,68 @@ impl<T, D: Digest> Default for MrkleTree<T, D> {
     }
 }
 
-impl<T, D: Digest> MrkleTree<T, D> {
+impl<T, D: Digest, Ix: IndexType> MrkleTree<T, D, Ix> {
+    /// Return [`Tree`] root refrecne.
+    pub fn root(&self) -> &MrkleNode<T, D, Ix> {
+        self.core.root()
+    }
+
     /// Returns `true` if the tree contains no nodes.
     #[inline]
     pub fn is_empty(&self) -> bool {
         self.core.is_empty()
+    }
+
+    /// Return the length of the [`Tree`] i.e # of nodes
+    #[inline]
+    pub fn len(&self) -> usize {
+        self.core.len()
+    }
+
+    /// Return root [`TreeView`] of the [`MrkleTree`]
+    #[inline]
+    pub fn view(&self) -> TreeView<'_, T, MrkleNode<T, D, Ix>, Ix> {
+        self.core.view()
+    }
+
+    /// Create a [`TreeView`] of the Merkle tree
+    /// from a node reference as root if found, else return None.
+    #[inline]
+    pub fn subtree_view(
+        &self,
+        root: NodeIndex<Ix>,
+    ) -> Option<TreeView<'_, T, MrkleNode<T, D, Ix>, Ix>> {
+        self.core.subtree_view(root)
+    }
+
+    /// Returns Iterator pattern [`Iter`] which returns a unmutable Node reference.
+    pub fn iter(&self) -> Iter<'_, T, MrkleNode<T, D, Ix>, Ix> {
+        self.core.iter()
+    }
+
+    ///Returns Iterator pattern [`IterIdx`] which returns a [`NodeIndex<Ix>`] of the node.
+    pub fn iter_idx(&self) -> IterIdx<'_, T, MrkleNode<T, D, Ix>, Ix> {
+        self.core.iter_idx()
+    }
+}
+
+impl<T, D: Digest, Ix: IndexType> MrkleTree<T, D, Ix>
+where
+    T: Eq + PartialEq,
+{
+    /// Create a [`TreeView`] from a node reference if found, else return None.
+    pub fn subtree_from_node(
+        &self,
+        target: &MrkleNode<T, D, Ix>,
+    ) -> Option<TreeView<'_, T, MrkleNode<T, D, Ix>, Ix>> {
+        self.core.subtree_from_node(target)
     }
 }
 
 #[cfg(test)]
 mod test {
 
-    use crate::{Hasher, MrkleHasher, MrkleNode, MrkleTree, NodeIndex, NodeType, prelude::*};
+    use crate::{Hasher, MrkleHasher, MrkleNode, MrkleTree, Node, NodeIndex, prelude::*};
     use sha1::Digest;
 
     const DATA_PAYLOAD: [u8; 32] = [0u8; 32];
@@ -353,7 +586,7 @@ mod test {
     #[test]
     fn test_build_with_mrkel() {
         let hasher = MrkleHasher::<sha1::Sha1>::new();
-        let node = MrkleNode::<_, sha1::Sha1, usize>::from_hasher(DATA_PAYLOAD, &hasher);
+        let node = MrkleNode::<_, sha1::Sha1, usize>::leaf_with_hasher(DATA_PAYLOAD, &hasher);
 
         assert_eq!(node.hash, sha1::Sha1::digest(DATA_PAYLOAD))
     }
@@ -361,8 +594,8 @@ mod test {
     #[test]
     fn test_build_internal_mrkel_node() {
         let hasher = MrkleHasher::<sha1::Sha1>::new();
-        let node1 = MrkleNode::<_, sha1::Sha1, usize>::from_hasher(DATA_PAYLOAD, &hasher);
-        let node2 = MrkleNode::<_, sha1::Sha1, usize>::from_hasher(DATA_PAYLOAD, &hasher);
+        let node1 = MrkleNode::<_, sha1::Sha1, usize>::leaf_with_hasher(DATA_PAYLOAD, &hasher);
+        let node2 = MrkleNode::<_, sha1::Sha1, usize>::leaf_with_hasher(DATA_PAYLOAD, &hasher);
 
         let children: Vec<NodeIndex<usize>> = vec![NodeIndex::new(0), NodeIndex::new(1)];
 
@@ -385,8 +618,8 @@ mod test {
     #[test]
     fn test_internal_contains_node_index() {
         let hasher = MrkleHasher::<sha1::Sha1>::new();
-        let node1 = MrkleNode::<_, sha1::Sha1, usize>::from_hasher(DATA_PAYLOAD, &hasher);
-        let node2 = MrkleNode::<_, sha1::Sha1, usize>::from_hasher(DATA_PAYLOAD, &hasher);
+        let node1 = MrkleNode::<_, sha1::Sha1, usize>::leaf_with_hasher(DATA_PAYLOAD, &hasher);
+        let node2 = MrkleNode::<_, sha1::Sha1, usize>::leaf_with_hasher(DATA_PAYLOAD, &hasher);
 
         let children: Vec<NodeIndex<usize>> = vec![NodeIndex::new(0), NodeIndex::new(1)];
 

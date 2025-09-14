@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 use crate::NodeError;
 use crate::prelude::*;
 
@@ -234,64 +235,128 @@ impl From<u8> for NodeIndex<u8> {
     }
 }
 
+/// Trait for mutable operations on Node data types.
+///
+/// This trait provides methods for modifying node structure, complementing
+/// the read-only operations provided by the [`Node`] trait.
+pub trait MutNode<T, Ix: IndexType = DefaultIx>: Node<T, Ix> {
+    /// Sets the parent node index.
+    fn set_parent(&mut self, parent: NodeIndex<Ix>);
+
+    /// Removes and returns the parent node index, if any.
+    fn take_parent(&mut self) -> Option<NodeIndex<Ix>>;
+
+    // Children mutation operations (Vec-like API)
+    /// Adds a child node index to the end of the children list.
+    fn push(&mut self, child: NodeIndex<Ix>);
+
+    /// Tries to add a child, returning an error if the operation is invalid.
+    fn try_push(&mut self, child: NodeIndex<Ix>) -> Result<(), NodeError<Ix>>;
+
+    /// Removes and returns the last child, if any.
+    fn pop(&mut self) -> Option<NodeIndex<Ix>>;
+
+    /// Inserts a child at the specified position.
+    ///
+    /// # Panics
+    /// Panics if `index > len`.
+    fn insert(&mut self, index: usize, child: NodeIndex<Ix>);
+
+    /// Removes and returns the child at the specified position.
+    ///
+    /// # Panics
+    /// Panics if `index >= len`.
+    fn remove(&mut self, index: usize) -> NodeIndex<Ix>;
+
+    /// Removes the first occurrence of the specified child.
+    /// Returns `true` if the child was found and removed.
+    fn remove_item(&mut self, child: NodeIndex<Ix>) -> bool;
+
+    /// Removes all children and returns them as a vector.
+    fn clear(&mut self) -> Vec<NodeIndex<Ix>>;
+
+    /// Retains only the children specified by the predicate.
+    fn retain<F>(&mut self, f: F)
+    where
+        F: FnMut(&NodeIndex<Ix>) -> bool;
+
+    /// Swaps two children at the given indices.
+    ///
+    /// # Panics
+    /// Panics if either index is out of bounds.
+    fn swap(&mut self, a: usize, b: usize);
+
+    /// Converts node to leaf by removing all children.
+    ///
+    /// Returns the removed children. For nodes with distinct leaf/internal
+    /// variants, this may perform type conversion.
+    fn into_leaf(&mut self) -> Result<Vec<NodeIndex<Ix>>, NodeError<Ix>> {
+        Ok(self.clear())
+    }
+
+    /// Returns the current capacity for children storage.
+    fn capacity(&self) -> usize {
+        // Default: capacity equals current length
+        self.child_count()
+    }
+}
+
 /// Trait for generic Node data type.
-pub trait NodeType<T, Ix: IndexType = DefaultIx> {
+pub trait Node<T, Ix: IndexType = DefaultIx> {
     /// Return the value of the node.
-    fn value(&self) -> &T;
+    fn value(&self) -> Option<&T> {
+        None
+    }
 
     /// Returns if the current node is a leaf (has no children).
-    fn is_leaf(&self) -> bool;
+    #[inline(always)]
+    fn is_leaf(&self) -> bool {
+        self.child_count() == 0
+    }
 
     /// Returns if the current node is a root (has no parent).
-    fn is_root(&self) -> bool;
+    #[inline(always)]
+    fn is_root(&self) -> bool {
+        self.parent().is_none()
+    }
 
     /// Return the number of children.
-    fn child_count(&self) -> usize;
+    #[inline(always)]
+    fn child_count(&self) -> usize {
+        self.children().len()
+    }
+
+    /// Return if Node contains connection to other node through `NodeIndex<Ix>`.
+    #[inline(always)]
+    fn contains(&self, node: &NodeIndex<Ix>) -> bool {
+        self.children().contains(node)
+    }
+
+    /// Return child at the specified position.
+    #[inline(always)]
+    fn child_at(&self, index: usize) -> Option<NodeIndex<Ix>> {
+        let children = self.children();
+        if children.len() <= index {
+            return None;
+        }
+        Some(children[index])
+    }
 
     /// Return parent if there exists one.
     fn parent(&self) -> Option<NodeIndex<Ix>>;
 
     /// Return set of children within `Node`.
     fn children(&self) -> &[NodeIndex<Ix>];
-
-    /// Return if Node contains connection to other node through `NodeIndex<Ix>`.
-    fn contains(&self, node: &NodeIndex<Ix>) -> bool;
-
-    /// Return child at the specified position.
-    fn child_at(&self, index: usize) -> Option<NodeIndex<Ix>>;
-
-    /// Set the parent node to [`NodeType`].
-    fn set_parent(&mut self, parent: Option<NodeIndex<Ix>>);
-
-    /// Remove parent from [`NodeType`].
-    fn remove_parent(&mut self) -> Option<NodeIndex<Ix>>;
-
-    /// Remove child from node children.
-    fn remove(&mut self, index: NodeIndex<Ix>);
-
-    /// Push [`NodeIndex`] to [`NodeType`].
-    fn push(&mut self, index: NodeIndex<Ix>);
-
-    /// Try to push [`NodeIndex`] to [`NodeType`].
-    fn try_push(&mut self, index: NodeIndex<Ix>) -> Result<(), NodeError<Ix>>;
-
-    /// Remove all children and return children indcies [`NodeIndex`].
-    fn clear(&mut self) -> Vec<NodeIndex<Ix>>;
-
-    /// Convert leaf [`NodeType`] into parent.
-    fn into_parent(&mut self) -> Result<(), NodeError<Ix>> {
-        unimplemented!("no possible way to turn a child into a parnet.")
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Node<T, Ix: IndexType = DefaultIx> {
+pub struct BasicNode<T, Ix: IndexType = DefaultIx> {
     pub value: T,
     pub(crate) parent: Option<NodeIndex<Ix>>,
     pub(crate) children: Vec<NodeIndex<Ix>>,
 }
 
-impl<T, Ix: IndexType> Node<T, Ix> {
+impl<T, Ix: IndexType> BasicNode<T, Ix> {
     pub(crate) fn new(value: T) -> Self {
         Self {
             value,
@@ -301,9 +366,9 @@ impl<T, Ix: IndexType> Node<T, Ix> {
     }
 }
 
-impl<T, Ix: IndexType> NodeType<T, Ix> for Node<T, Ix> {
-    fn value(&self) -> &T {
-        &self.value
+impl<T, Ix: IndexType> Node<T, Ix> for BasicNode<T, Ix> {
+    fn value(&self) -> Option<&T> {
+        Some(&self.value)
     }
 
     fn is_root(&self) -> bool {
@@ -312,7 +377,7 @@ impl<T, Ix: IndexType> NodeType<T, Ix> for Node<T, Ix> {
 
     #[inline]
     fn is_leaf(&self) -> bool {
-        self.children.len() == 0
+        self.children.is_empty()
     }
 
     #[inline]
@@ -333,33 +398,65 @@ impl<T, Ix: IndexType> NodeType<T, Ix> for Node<T, Ix> {
     fn child_at(&self, index: usize) -> Option<NodeIndex<Ix>> {
         if let Some(&child) = self.children.get(index) {
             return Some(child);
-        } else {
-            return None;
         }
+        None
     }
 
     #[inline]
     fn contains(&self, node: &NodeIndex<Ix>) -> bool {
         self.children.contains(node)
     }
+}
 
+impl<T, Ix: IndexType> MutNode<T, Ix> for BasicNode<T, Ix> {
     #[inline(always)]
     fn push(&mut self, index: NodeIndex<Ix>) {
         self.try_push(index).unwrap()
     }
 
     #[inline]
-    fn remove(&mut self, index: NodeIndex<Ix>) {
-        if let Some(idx) = self.children.iter().position(|idx| idx == &index) {
-            self.children.swap_remove(idx);
+    fn insert(&mut self, index: usize, child: NodeIndex<Ix>) {
+        self.children.insert(index, child);
+    }
+
+    #[inline]
+    fn pop(&mut self) -> Option<NodeIndex<Ix>> {
+        self.children.pop()
+    }
+
+    #[inline]
+    fn swap(&mut self, a: usize, b: usize) {
+        self.children.swap(a, b);
+    }
+
+    #[inline]
+    fn retain<F>(&mut self, f: F)
+    where
+        F: FnMut(&NodeIndex<Ix>) -> bool,
+    {
+        self.children.retain(f);
+    }
+
+    #[inline]
+    fn remove(&mut self, index: usize) -> NodeIndex<Ix> {
+        self.children.remove(index)
+    }
+
+    #[inline]
+    fn remove_item(&mut self, child: NodeIndex<Ix>) -> bool {
+        if let Some(index) = self.children.iter().position(|&idx| idx == child) {
+            self.children.swap_remove(index);
+            true
+        } else {
+            false
         }
     }
 
-    fn set_parent(&mut self, parent: Option<NodeIndex<Ix>>) {
-        self.parent = parent;
+    fn set_parent(&mut self, parent: NodeIndex<Ix>) {
+        self.parent = Some(parent);
     }
 
-    fn remove_parent(&mut self) -> Option<NodeIndex<Ix>> {
+    fn take_parent(&mut self) -> Option<NodeIndex<Ix>> {
         self.parent.take()
     }
 
@@ -368,7 +465,7 @@ impl<T, Ix: IndexType> NodeType<T, Ix> for Node<T, Ix> {
             return Err(NodeError::Duplicate { child: index });
         }
         self.children.push(index);
-        return Ok(());
+        Ok(())
     }
 
     fn clear(&mut self) -> Vec<NodeIndex<Ix>> {
