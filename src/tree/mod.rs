@@ -81,7 +81,7 @@ impl<T, N: Node<T, Ix>, Ix: IndexType> Tree<T, N, Ix> {
     /// # Returns
     /// - `Ok(&N)` if a root exists.
     /// - `Err(TreeError::MissingRoot)` if the tree has no root.
-    pub fn try_root(&self) -> Result<&N, TreeError<Ix>> {
+    pub fn try_root(&self) -> Result<&N, TreeError> {
         if let Some(idx) = self.root {
             Ok(&self.nodes[idx.index()])
         } else {
@@ -90,6 +90,14 @@ impl<T, N: Node<T, Ix>, Ix: IndexType> Tree<T, N, Ix> {
             // structure in construction.
             Err(TreeError::MissingRoot)
         }
+    }
+
+    /// Returns a reference to an element [`Node`] or subslice depending on the type of index.
+    pub fn get<I>(&self, idx: I) -> Option<&<I as SliceIndex<[N]>>::Output>
+    where
+        I: SliceIndex<[N]>,
+    {
+        self.nodes.get(idx)
     }
 
     /// Push nodes onto [`Tree`] node list without connection.
@@ -223,6 +231,25 @@ mod test {
 
         // Test that iterator is exhausted
         assert!(tree_iter.next().is_none());
+    }
+
+    #[test]
+    fn test_tree_get() {
+        let mut root: Node<String> = Node::new("hello".to_string());
+        root.children = vec![NodeIndex::new(1), NodeIndex::new(2)];
+        let mut tree: Tree<String> = Tree::new();
+        let n1 = Node::new("world".to_string());
+        let n2 = Node::new("!".to_string());
+        tree.root = Some(NodeIndex::new(0));
+        tree.nodes.push(root.clone());
+        tree.nodes.push(n1.clone());
+        tree.nodes.push(n2.clone());
+
+        if let Some(output) = tree.get(..) {
+            assert_eq!(root, output[0]);
+            assert_eq!(n1, output[1]);
+            assert_eq!(n2, output[2]);
+        }
     }
 
     #[test]
