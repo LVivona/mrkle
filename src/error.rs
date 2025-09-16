@@ -1,23 +1,15 @@
-use crate::{DefaultIx, IndexType, NodeIndex};
-
-/// The error returned when trying preform operation on `NodeType`
+/// Errors returned when trying preform operation on `Node` trait
 #[derive(Debug, thiserror::Error)]
-pub enum NodeError<Ix: IndexType> {
+pub enum NodeError {
     /// Node already contains node index.
     #[error("Node already contains {child}.")]
     Duplicate {
         /// child already exist within Node.
-        child: NodeIndex<Ix>,
-    },
-    ///
-    #[error("{index} is an invalid ")]
-    InvalidReplacement {
-        ///
-        index: NodeIndex<Ix>,
+        child: usize,
     },
 }
 
-/// The error returned when trying to convert a byte slice to an [`entry`]
+/// Errors returned when trying to convert a byte slice to an [`entry`]
 #[derive(Debug, thiserror::Error)]
 pub enum EntryError {
     /// entry can not init hash from the digest.
@@ -27,7 +19,7 @@ pub enum EntryError {
 
 /// Errors that may occur while constructing or manipulating a [`Tree`].
 #[derive(Debug, thiserror::Error)]
-pub enum TreeError<Ix: IndexType = DefaultIx> {
+pub enum TreeError {
     /// The tree has no root node assigned.
     #[error("Root of the tree is missing.")]
     MissingRoot,
@@ -36,7 +28,7 @@ pub enum TreeError<Ix: IndexType = DefaultIx> {
     ///
     /// In a valid tree, the root must never have a parent.
     #[error("Root node {0} cannot have a parent.")]
-    InvalidRoot(NodeIndex<Ix>),
+    InvalidRoot(usize),
 
     /// A cycle was detected in the tree structure.
     ///
@@ -50,7 +42,16 @@ pub enum TreeError<Ix: IndexType = DefaultIx> {
     #[error("Tree contains a disjoint node {node} with no parent.")]
     DisjointNode {
         /// Node index that is disjoint
-        node: NodeIndex<Ix>,
+        node: usize,
+    },
+
+    /// Attempt to index out of bounds.
+    #[error("Index {index} is out of bounds for tree with {len} leaves")]
+    IndexOutOfBounds {
+        /// Index out of bounds.
+        index: usize,
+        /// Number of nodes.
+        len: usize,
     },
 
     /// Attempted to assign a new parent to a node that already has one.
@@ -62,10 +63,22 @@ pub enum TreeError<Ix: IndexType = DefaultIx> {
     )]
     ParentConflict {
         /// The node that was expected to be the parent.
-        expected: NodeIndex<Ix>,
+        expected: usize,
         /// The node that is already assigned as the parent.
-        parent: NodeIndex<Ix>,
+        parent: usize,
         /// The child node being reassigned.
-        child: NodeIndex<Ix>,
+        child: usize,
     },
+
+    /// The error returned when trying preform operation on `Node` trait
+    #[error("{0}")]
+    NodeError(#[from] NodeError),
+}
+
+///
+#[derive(Debug, thiserror::Error)]
+pub enum ProofError {
+    /// Errors that may occur while constructing or manipulating a [`Tree`].
+    #[error("{0}")]
+    TreeError(#[from] TreeError),
 }
