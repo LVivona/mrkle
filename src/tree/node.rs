@@ -251,7 +251,7 @@ pub trait MutNode<T, Ix: IndexType = DefaultIx>: Node<T, Ix> {
     fn push(&mut self, child: NodeIndex<Ix>);
 
     /// Tries to add a child, returning an error if the operation is invalid.
-    fn try_push(&mut self, child: NodeIndex<Ix>) -> Result<(), NodeError<Ix>>;
+    fn try_push(&mut self, child: NodeIndex<Ix>) -> Result<(), NodeError>;
 
     /// Removes and returns the last child, if any.
     fn pop(&mut self) -> Option<NodeIndex<Ix>>;
@@ -290,7 +290,7 @@ pub trait MutNode<T, Ix: IndexType = DefaultIx>: Node<T, Ix> {
     ///
     /// Returns the removed children. For nodes with distinct leaf/internal
     /// variants, this may perform type conversion.
-    fn into_leaf(&mut self) -> Result<Vec<NodeIndex<Ix>>, NodeError<Ix>> {
+    fn into_leaf(&mut self) -> Result<Vec<NodeIndex<Ix>>, NodeError> {
         Ok(self.clear())
     }
 
@@ -460,9 +460,11 @@ impl<T, Ix: IndexType> MutNode<T, Ix> for BasicNode<T, Ix> {
         self.parent.take()
     }
 
-    fn try_push(&mut self, index: NodeIndex<Ix>) -> Result<(), NodeError<Ix>> {
+    fn try_push(&mut self, index: NodeIndex<Ix>) -> Result<(), NodeError> {
         if self.contains(&index) {
-            return Err(NodeError::Duplicate { child: index });
+            return Err(NodeError::Duplicate {
+                child: index.index(),
+            });
         }
         self.children.push(index);
         Ok(())
