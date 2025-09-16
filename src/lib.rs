@@ -57,6 +57,7 @@ pub(crate) mod prelude {
     }
 
     pub use core::marker::{Copy, PhantomData};
+    pub use core::slice::SliceIndex;
     #[cfg(not(feature = "std"))]
     pub use no_stds::*;
     #[cfg(feature = "std")]
@@ -80,15 +81,10 @@ use prelude::*;
 /// let packet = [0u8; 10];
 /// let node = MrkleNode::<_, Sha1>::leaf(packet);
 /// ```
-#[derive(Debug)]
 pub struct MrkleNode<T, D: Digest, Ix: IndexType = DefaultIx> {
     /// The internal data of the node.
-    ///
-    ///
     payload: Payload<T>,
     /// The parents of this node, if any.
-    ///
-    ///
     parent: Option<NodeIndex<Ix>>,
     /// The children of this node.
     ///
@@ -396,7 +392,7 @@ impl<T, D: Digest, Ix: IndexType> Node<T, Ix> for MrkleNode<T, D, Ix> {
     }
 
     fn is_root(&self) -> bool {
-        self.parent.is_none()
+        self.parent.is_none() && !self.payload.is_leaf()
     }
 
     #[inline]
@@ -447,6 +443,85 @@ impl<T, D: Digest, Ix: IndexType> AsRef<[u8]> for MrkleNode<T, D, Ix> {
 impl<T, D: Digest> core::borrow::Borrow<entry> for MrkleNode<T, D> {
     fn borrow(&self) -> &entry {
         self.as_ref()
+    }
+}
+
+impl<T, D: Digest, Ix: IndexType> core::fmt::Debug for MrkleNode<T, D, Ix>
+where
+    T: core::fmt::Debug,
+{
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        let mut debug_struct = f.debug_struct("MrkleNode");
+
+        debug_struct
+            .field("type", &if self.is_leaf() { "leaf" } else { "internal" })
+            .field("is_root", &self.is_root())
+            .field("child_count", &self.child_count());
+
+        // Include payload for debug builds
+        debug_struct.field("payload", &self.payload);
+
+        // Show parent index if exists
+        if let Some(parent) = &self.parent {
+            debug_struct.field("parent", parent);
+        }
+
+        // Show children indices
+        if !self.children.is_empty() {
+            debug_struct.field("children", &self.children);
+        }
+
+        // Hash representation - show first and last few bytes for readability
+        let hash_bytes = self.hash.as_slice();
+        if hash_bytes.len() > 8 {
+            debug_struct.field(
+                "hash",
+                &format!(
+                    "{:02x}{:02x}...{:02x}{:02x} ({} bytes)",
+                    hash_bytes[0],
+                    hash_bytes[1],
+                    hash_bytes[hash_bytes.len() - 2],
+                    hash_bytes[hash_bytes.len() - 1],
+                    hash_bytes.len()
+                ),
+            );
+        } else {
+            debug_struct.field("hash", &format!("{:02x?}", hash_bytes));
+        }
+
+        debug_struct.finish()
+    }
+}
+
+// Display implementation - user-friendly representation
+impl<T, D: Digest, Ix: IndexType> core::fmt::Display for MrkleNode<T, D, Ix>
+where
+    T: core::fmt::Display,
+{
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        let hash_bytes = self.hash.as_slice();
+        let hash_preview = if hash_bytes.len() >= 4 {
+            format!(
+                "{:02x}{:02x}...{:02x}{:02x}",
+                hash_bytes[0],
+                hash_bytes[1],
+                hash_bytes[hash_bytes.len() - 2],
+                hash_bytes[hash_bytes.len() - 1]
+            )
+        } else {
+            format!("{:02x?}", hash_bytes)
+        };
+
+        if self.is_leaf() {
+            write!(f, "Leaf[hash: {}]", hash_preview)
+        } else {
+            write!(
+                f,
+                "Internal[children: {}, hash: {}]",
+                self.children.len(),
+                hash_preview
+            )
+        }
     }
 }
 
@@ -578,7 +653,6 @@ mod test {
     #[test]
     fn test_default_mrkle_node() {
         let node = MrkleNode::<_, sha1::Sha1, usize>::leaf(DATA_PAYLOAD);
-
         let expected = sha1::Sha1::digest(DATA_PAYLOAD);
         assert_eq!(node.hash, expected)
     }
