@@ -12,9 +12,9 @@ pub use node::{BasicNode, IndexType, Node, NodeIndex};
 
 pub(crate) use node::DefaultIx;
 
-/// [`Tree`] is a generic hierarchical tree data structure.
+/// A generic hierarchical tree data structure.
 ///
-/// It stores a collection of nodes connected in a parent-child
+/// It stores a collection of [`Node`] connected in a parent-child
 /// relationship. The tree can be constructed either from the top
 /// down (root first) or bottom up (leaves first).
 ///
@@ -37,7 +37,7 @@ pub struct Tree<T, N = BasicNode<T>, Ix: IndexType = DefaultIx> {
     phantom: PhantomData<T>,
 }
 
-impl<T, N: Node<T, Ix>, Ix: IndexType> Tree<T, N, Ix> {
+impl<T, N: Node<Ix>, Ix: IndexType> Tree<T, N, Ix> {
     /// Creates an empty tree with no nodes.
     #[inline]
     pub(crate) fn new() -> Self {
@@ -100,12 +100,25 @@ impl<T, N: Node<T, Ix>, Ix: IndexType> Tree<T, N, Ix> {
         self.nodes.get(idx)
     }
 
+    /// Returns a mut reference to an element [`Node`] or subslice depending on the type of index.
+    pub fn get_mut<I>(&mut self, idx: I) -> Option<&mut <I as SliceIndex<[N]>>::Output>
+    where
+        I: SliceIndex<[N]>,
+    {
+        self.nodes.get_mut(idx)
+    }
+
     /// Push nodes onto [`Tree`] node list without connection.
     ///
     /// Return there [`NodeIndex`] within the tree
     pub fn push(&mut self, node: N) -> NodeIndex<Ix> {
         self.nodes.push(node);
-        NodeIndex::new(self.nodes.len())
+        NodeIndex::new(self.nodes.len() - 1)
+    }
+
+    /// Inserts an [`Node`] at position index within the vector, shifting all elements after it to the right.
+    pub fn insert(&mut self, index: NodeIndex<Ix>, node: N) {
+        self.nodes.insert(index.index(), node);
     }
 
     ///Return root [`TreeView`] of the [`Tree`]
@@ -178,13 +191,13 @@ impl<T, N: Node<T, Ix>, Ix: IndexType> Tree<T, N, Ix> {
     }
 }
 
-impl<T, N: Node<T, Ix>, Ix: IndexType> Default for Tree<T, N, Ix> {
+impl<T, N: Node<Ix>, Ix: IndexType> Default for Tree<T, N, Ix> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<'a, T, N: Node<T, Ix>, Ix: IndexType> IntoIterator for &'a Tree<T, N, Ix> {
+impl<'a, T, N: Node<Ix>, Ix: IndexType> IntoIterator for &'a Tree<T, N, Ix> {
     type IntoIter = Iter<'a, T, N, Ix>;
     type Item = &'a N;
 

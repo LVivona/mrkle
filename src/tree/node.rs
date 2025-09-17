@@ -239,7 +239,7 @@ impl From<u8> for NodeIndex<u8> {
 ///
 /// This trait provides methods for modifying node structure, complementing
 /// the read-only operations provided by the [`Node`] trait.
-pub trait MutNode<T, Ix: IndexType = DefaultIx>: Node<T, Ix> {
+pub trait MutNode<Ix: IndexType = DefaultIx>: Node<Ix> {
     /// Sets the parent node index.
     fn set_parent(&mut self, parent: NodeIndex<Ix>);
 
@@ -302,12 +302,7 @@ pub trait MutNode<T, Ix: IndexType = DefaultIx>: Node<T, Ix> {
 }
 
 /// Trait for generic Node data type.
-pub trait Node<T, Ix: IndexType = DefaultIx> {
-    /// Return the value of the node.
-    fn value(&self) -> Option<&T> {
-        None
-    }
-
+pub trait Node<Ix: IndexType = DefaultIx> {
     /// Returns if the current node is a leaf (has no children).
     #[inline(always)]
     fn is_leaf(&self) -> bool {
@@ -366,11 +361,7 @@ impl<T, Ix: IndexType> BasicNode<T, Ix> {
     }
 }
 
-impl<T, Ix: IndexType> Node<T, Ix> for BasicNode<T, Ix> {
-    fn value(&self) -> Option<&T> {
-        Some(&self.value)
-    }
-
+impl<T, Ix: IndexType> Node<Ix> for BasicNode<T, Ix> {
     fn is_root(&self) -> bool {
         self.parent.is_none()
     }
@@ -408,7 +399,7 @@ impl<T, Ix: IndexType> Node<T, Ix> for BasicNode<T, Ix> {
     }
 }
 
-impl<T, Ix: IndexType> MutNode<T, Ix> for BasicNode<T, Ix> {
+impl<T, Ix: IndexType> MutNode<Ix> for BasicNode<T, Ix> {
     #[inline(always)]
     fn push(&mut self, index: NodeIndex<Ix>) {
         self.try_push(index).unwrap()

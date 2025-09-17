@@ -6,7 +6,7 @@ use crate::prelude::*;
 /// It a borrowed store of a sub-tree containing nodes connected
 /// in a parent-child relationship. Similarly to the [`Tree`].
 #[derive(Debug)]
-pub struct TreeView<'s, T, N: Node<T, Ix>, Ix: IndexType = DefaultIx> {
+pub struct TreeView<'s, T, N: Node<Ix>, Ix: IndexType = DefaultIx> {
     /// The index of the root.
     pub(crate) root: NodeIndex<Ix>,
     /// Collection of all node spaning from the root.
@@ -15,7 +15,7 @@ pub struct TreeView<'s, T, N: Node<T, Ix>, Ix: IndexType = DefaultIx> {
     phantom: PhantomData<T>,
 }
 
-impl<'s, T, N: Node<T, Ix>, Ix: IndexType> TreeView<'s, T, N, Ix> {
+impl<'s, T, N: Node<Ix>, Ix: IndexType> TreeView<'s, T, N, Ix> {
     /// Create an view of the [`Tree`].
     pub(crate) fn new(root: NodeIndex<Ix>, nodes: Vec<(NodeIndex<Ix>, &'s N)>) -> Self {
         Self {
@@ -64,7 +64,7 @@ impl<'s, T, N: Node<T, Ix>, Ix: IndexType> TreeView<'s, T, N, Ix> {
     }
 }
 
-impl<'s, T, N: Node<T, Ix>, Ix: IndexType> From<&'s Tree<T, N, Ix>> for TreeView<'s, T, N, Ix> {
+impl<'s, T, N: Node<Ix>, Ix: IndexType> From<&'s Tree<T, N, Ix>> for TreeView<'s, T, N, Ix> {
     fn from(value: &'s Tree<T, N, Ix>) -> Self {
         let root = value.root.unwrap();
         let root_node: &N = &value.nodes[root.index()];
@@ -85,7 +85,7 @@ impl<'s, T, N: Node<T, Ix>, Ix: IndexType> From<&'s Tree<T, N, Ix>> for TreeView
     }
 }
 
-impl<'s, T, N: Node<T, Ix>, Ix: IndexType> IntoIterator for TreeView<'s, T, N, Ix> {
+impl<'s, T, N: Node<Ix>, Ix: IndexType> IntoIterator for TreeView<'s, T, N, Ix> {
     type IntoIter = Iter<'s, T, N, Ix>;
     type Item = &'s N;
     fn into_iter(self) -> Self::IntoIter {
