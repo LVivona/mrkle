@@ -28,6 +28,7 @@ pub(crate) mod tree;
 pub mod error;
 
 pub(crate) use crate::error::{EntryError, NodeError, TreeError};
+use crate::error::{MrkleError, ProofError};
 pub(crate) use crate::tree::DefaultIx;
 
 pub use crate::hasher::{GenericArray, Hasher, MrkleHasher};
@@ -265,6 +266,17 @@ where
             children: Vec::with_capacity(0),
         }
     }
+}
+
+impl<T, D: Digest, Ix: IndexType> MrkleNode<T, D, Ix> {
+    /// Return payload value within the leaf node
+    pub fn value(&self) -> Option<&T> {
+        if self.payload.is_leaf() {
+            Some(&self.payload)
+        } else {
+            None
+        }
+    }
 
     /// Creates a new internal (non-leaf) node with the specified children and hash.
     ///
@@ -386,11 +398,7 @@ where
     }
 }
 
-impl<T, D: Digest, Ix: IndexType> Node<T, Ix> for MrkleNode<T, D, Ix> {
-    fn value(&self) -> Option<&T> {
-        Some(&self.payload)
-    }
-
+impl<T, D: Digest, Ix: IndexType> Node<Ix> for MrkleNode<T, D, Ix> {
     fn is_root(&self) -> bool {
         self.parent.is_none() && !self.payload.is_leaf()
     }
@@ -446,10 +454,7 @@ impl<T, D: Digest> core::borrow::Borrow<entry> for MrkleNode<T, D> {
     }
 }
 
-impl<T, D: Digest, Ix: IndexType> core::fmt::Debug for MrkleNode<T, D, Ix>
-where
-    T: core::fmt::Debug,
-{
+impl<T, D: Digest, Ix: IndexType> core::fmt::Debug for MrkleNode<T, D, Ix> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         let mut debug_struct = f.debug_struct("MrkleNode");
 
@@ -458,35 +463,28 @@ where
             .field("is_root", &self.is_root())
             .field("child_count", &self.child_count());
 
-        // Include payload for debug builds
-        debug_struct.field("payload", &self.payload);
-
-        // Show parent index if exists
         if let Some(parent) = &self.parent {
             debug_struct.field("parent", parent);
         }
 
-        // Show children indices
         if !self.children.is_empty() {
             debug_struct.field("children", &self.children);
         }
 
-        // Hash representation - show first and last few bytes for readability
-        let hash_bytes = self.hash.as_slice();
-        if hash_bytes.len() > 8 {
+        let bytes = &self.hash;
+        if bytes.len() > 8 {
             debug_struct.field(
                 "hash",
                 &format!(
-                    "{:02x}{:02x}...{:02x}{:02x} ({} bytes)",
-                    hash_bytes[0],
-                    hash_bytes[1],
-                    hash_bytes[hash_bytes.len() - 2],
-                    hash_bytes[hash_bytes.len() - 1],
-                    hash_bytes.len()
+                    "{:02x?}{:02x?}...{:02x?}{:02x?}",
+                    bytes[0],
+                    bytes[1],
+                    bytes[bytes.len() - 2],
+                    bytes[bytes.len() - 1]
                 ),
             );
         } else {
-            debug_struct.field("hash", &format!("{:02x?}", hash_bytes));
+            debug_struct.field("hash", &format!("{:02x?}", bytes));
         }
 
         debug_struct.finish()
@@ -494,10 +492,7 @@ where
 }
 
 // Display implementation - user-friendly representation
-impl<T, D: Digest, Ix: IndexType> core::fmt::Display for MrkleNode<T, D, Ix>
-where
-    T: core::fmt::Display,
-{
+impl<T, D: Digest, Ix: IndexType> core::fmt::Display for MrkleNode<T, D, Ix> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         let hash_bytes = self.hash.as_slice();
         let hash_preview = if hash_bytes.len() >= 4 {
@@ -567,6 +562,84 @@ impl<T, D: Digest> Default for MrkleTree<T, D> {
     }
 }
 
+impl<T, D: Digest, Ix: IndexType> MrkleTree<T, D, Ix>
+where
+    T: AsRef<[u8]>,
+{
+    /// Constructs a Merkle binary tree from leaf nodes using bottom-up approach.
+    ///
+    /// # Parameters
+    /// - `leaves`: Vector of [`T`] nodes to build the tree from
+    ///
+    /// # Returns
+    /// A generic binary [`MrkleTree`]
+    ///
+    /// # Example
+    /// ```
+    /// use mrkle::MrkleTree;
+    /// use sha1::Sha1;
+    /// let leaves : Vec<&str> = vec![
+    ///     "A"
+    ///     "B",
+    ///     "C",
+    ///     "D",
+    /// ];
+    ///
+    /// let tree = MrkleTree::<&str, Sha1>::from_leaves(leaves);
+    /// ```
+    pub fn from_leaves(mut leaves: Vec<T>) -> Self {
+        let mut tree = Tree::new();
+
+        if leaves.is_empty() {
+            return Self { core: tree };
+        }
+
+        let hasher = MrkleHasher::<D>::new();
+
+        // Handle single leaf case
+        if leaves.len() == 1 {
+            let payload = leaves.pop().unwrap();
+
+            let hash = hasher.hash(&payload);
+            let leaf = MrkleNode::leaf_with_hash(payload, hash.clone());
+            let leaf_idx = tree.push(leaf);
+
+            let hash = hasher.hash(&hash);
+            let root_idx = tree.push(MrkleNode::internal(vec![leaf_idx], hash));
+
+            tree.nodes[leaf_idx.index()].parent = Some(root_idx);
+            tree.nodes[root_idx.index()].children.push(leaf_idx);
+            tree.root = Some(root_idx);
+
+            return Self { core: tree };
+        }
+
+        let mut queue: VecDeque<NodeIndex<Ix>> = VecDeque::new();
+        for payload in leaves {
+            let idx = tree.push(MrkleNode::leaf(payload));
+            queue.push_back(idx);
+        }
+
+        while queue.len() > 1 {
+            let lhs = queue.pop_front().unwrap();
+            let rhs = queue.pop_front().unwrap();
+
+            let hash = hasher.concat(&tree.nodes[lhs.index()].hash, &tree.nodes[rhs.index()].hash);
+
+            let parent_idx = tree.push(MrkleNode::internal(vec![lhs, rhs], hash));
+
+            tree.nodes[lhs.index()].parent = Some(parent_idx);
+            tree.nodes[rhs.index()].parent = Some(parent_idx);
+
+            queue.push_back(parent_idx);
+        }
+
+        tree.root = queue.pop_front();
+
+        Self { core: tree }
+    }
+}
+
 impl<T, D: Digest, Ix: IndexType> MrkleTree<T, D, Ix> {
     /// Return [`Tree`] root refrecne.
     pub fn root(&self) -> &MrkleNode<T, D, Ix> {
@@ -583,6 +656,11 @@ impl<T, D: Digest, Ix: IndexType> MrkleTree<T, D, Ix> {
     #[inline]
     pub fn len(&self) -> usize {
         self.core.len()
+    }
+
+    /// Returns a reference to an element [`MrkleNode<T, D, Ix>`].
+    pub fn get(&self, index: NodeIndex<Ix>) -> Option<&MrkleNode<T, D, Ix>> {
+        self.core.get(index.index())
     }
 
     /// Return root [`TreeView`] of the [`MrkleTree`]
@@ -692,6 +770,7 @@ mod test {
     #[test]
     fn test_internal_contains_node_index() {
         let hasher = MrkleHasher::<sha1::Sha1>::new();
+
         let node1 = MrkleNode::<_, sha1::Sha1, usize>::leaf_with_hasher(DATA_PAYLOAD, &hasher);
         let node2 = MrkleNode::<_, sha1::Sha1, usize>::leaf_with_hasher(DATA_PAYLOAD, &hasher);
 
@@ -702,5 +781,18 @@ mod test {
         let parent: MrkleNode<[u8; 32], sha1::Sha1, usize> = MrkleNode::internal(children, hash);
 
         assert!(parent.contains(&NodeIndex::new(0)));
+    }
+
+    #[test]
+    fn test_building_binary_tree_base_case() {
+        let leaves: Vec<&str> = vec!["A"];
+        let tree = MrkleTree::<&str, sha1::Sha1>::from_leaves(leaves);
+    }
+
+    #[test]
+    fn test_building_binary_tree() {
+        let leaves: Vec<&str> = vec!["A", "B", "C", "D", "E"];
+        let tree = MrkleTree::<&str, sha1::Sha1>::from_leaves(leaves);
+        assert_eq!(tree.len(), 9)
     }
 }
