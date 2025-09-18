@@ -70,3 +70,10 @@ docs/_build/
 
 # Pyenv
 .python-version
+
+# Rust Docs
+*/docs/.rustc_info.json
+*/docs/.rustdoc_fingerprint.json
+*/docs/doc/
+*/docs/debug/
+*/docs/release/
