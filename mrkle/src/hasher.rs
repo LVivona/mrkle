@@ -2,11 +2,11 @@ use crypto::digest::{Digest, OutputSizeUser};
 
 /// A fixed-size byte array used as a buffer for cryptographic hash output.
 ///
-/// This is a type alias for [`generic_array::GenericArray`], specialized with
+/// This is a type alias for [`GenericArray`](crypto::common::generic_array::GenericArray), specialized with
 /// `u8` as the element type and the output size determined by the hash function `D`.
 ///
 /// It is widely used across the [`RustCrypto`](https://github.com/RustCrypto) crates
-/// (e.g., [`sha1`], [`sha2`], [`sha3`], [`blake2`]) to represent digest outputs.
+/// (e.g., `sha1`, `sha2`, `sha3`, `blake2`) to represent digest outputs.
 ///
 /// # Type Parameters
 /// - `D`: A type that implements [`crypto::common::OutputSizeUser`], providing the

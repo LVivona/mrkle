@@ -1,5 +1,5 @@
 #![deny(missing_docs)]
-#![doc = include_str!("../README.md")]
+#![doc = include_str!("../DOC_README.md")]
 #![cfg_attr(not(feature = "std"), no_std)]
 
 #[cfg(not(feature = "std"))]
@@ -20,22 +20,19 @@ pub mod hasher;
 /// Core tree structures and nodes for the Merkle tree implementation.
 ///
 /// This module contains [`MrkleNode`], [`Tree`], and the [`Node`] trait.
-pub(crate) mod tree;
+pub mod tree;
 
 /// Error types for the Merkle tree crate.
 ///
 /// Includes errors for tree construction, hashing, and I/O operations.
 pub mod error;
 
-pub(crate) use crate::error::{EntryError, NodeError, TreeError};
-use crate::error::{MrkleError, ProofError};
+pub(crate) use crate::error::{EntryError, MrkleError, NodeError, ProofError, TreeError};
 pub(crate) use crate::tree::DefaultIx;
 
 pub use crate::hasher::{GenericArray, Hasher, MrkleHasher};
 pub use crate::tree::{IndexType, Iter, IterIdx, Node, NodeIndex, Tree, TreeView};
 pub use borrowed::*;
-
-use crypto::digest::Digest;
 
 #[allow(unused_imports, reason = "future proofing for tree features.")]
 pub(crate) mod prelude {
@@ -59,17 +56,19 @@ pub(crate) mod prelude {
 
     pub use core::marker::{Copy, PhantomData};
     pub use core::slice::SliceIndex;
+    pub(crate) use crypto::digest::Digest;
     #[cfg(not(feature = "std"))]
     pub use no_stds::*;
     #[cfg(feature = "std")]
     pub use stds::*;
 }
 
+use crypto::digest::OutputSizeUser;
 use prelude::*;
 
 /// A generic immutable node in a Merkle Tree.
 ///
-/// [`MekrleNode`] is a our default for our [`Tree`]. It implments The
+/// [`MrkleNode`] is a our default for our [`Tree`]. It implments The
 /// [`Node`] trait and stores both the structural relationship
 /// and the cryptographic hash value that repersents its subtree.
 ///
@@ -544,8 +543,8 @@ impl<T, D: Digest, Ix: IndexType> core::fmt::Display for MrkleNode<T, D, Ix> {
 /// of the chosen digest algorithm `D`. Using weak or broken hash functions
 /// compromises the tree's integrity guarantees.
 ///
-/// [`Digest`]: digest::Digest
-/// [`DefaultIx`]: petgraph::graph::DefaultIx
+/// [`Digest`]: crypto::digest::Digest
+/// [`DefaultIx`]: DefaultIx
 pub struct MrkleTree<T, D: Digest, Ix: IndexType = DefaultIx> {
     /// The underlying tree data structure.
     ///
@@ -569,7 +568,7 @@ where
     /// Constructs a Merkle binary tree from leaf nodes using bottom-up approach.
     ///
     /// # Parameters
-    /// - `leaves`: Vector of [`T`] nodes to build the tree from
+    /// - `leaves`: Vector of `T` nodes to build the tree from
     ///
     /// # Returns
     /// A generic binary [`MrkleTree`]
@@ -579,7 +578,7 @@ where
     /// use mrkle::MrkleTree;
     /// use sha1::Sha1;
     /// let leaves : Vec<&str> = vec![
-    ///     "A"
+    ///     "A",
     ///     "B",
     ///     "C",
     ///     "D",
@@ -703,6 +702,14 @@ where
     }
 }
 
+impl<'a, T, D: Digest, Ix: IndexType> IntoIterator for &'a MrkleTree<T, D, Ix> {
+    type IntoIter = Iter<'a, T, MrkleNode<T, D, Ix>, Ix>;
+    type Item = &'a MrkleNode<T, D, Ix>;
+    fn into_iter(self) -> Self::IntoIter {
+        self.iter()
+    }
+}
+
 #[cfg(test)]
 mod test {
 
@@ -792,7 +799,16 @@ mod test {
     #[test]
     fn test_building_binary_tree() {
         let leaves: Vec<&str> = vec!["A", "B", "C", "D", "E"];
-        let tree = MrkleTree::<&str, sha1::Sha1>::from_leaves(leaves);
-        assert_eq!(tree.len(), 9)
+        let tree = MrkleTree::<&str, sha1::Sha1>::from_leaves(leaves.clone());
+        assert_eq!(tree.len(), 9);
+        for node in &tree {
+            if node.is_leaf() {
+                if let Some(value) = node.value() {
+                    assert!(leaves.contains(value));
+                } else {
+                    assert!(false);
+                }
+            }
+        }
     }
 }
