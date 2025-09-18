@@ -1,14 +1,18 @@
 use pyo3::prelude::*;
 
+use crate::crypto::register_crypto;
 use crate::errors::register_exceptions;
 
+pub mod crypto;
 pub mod errors;
+pub mod tree;
 
 /// A Python module implemented in Rust.
 #[pymodule]
 fn _mrkle_rs(m: &Bound<'_, PyModule>) -> PyResult<()> {
     // Register exception module within mrkle_rs [`Bound<'_, PyModule>`].
     register_exceptions(m)?;
+    register_crypto(m)?;
 
     m.add("__version__", env!("CARGO_PKG_VERSION"))?;
     Ok(())

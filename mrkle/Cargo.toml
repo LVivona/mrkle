@@ -1,0 +1,30 @@
+[package]
+name = "mrkle"
+version = "0.0.1-rc-0"
+edition = "2024"
+description = "A simple and performant Merkle Tree implementation in Rust, with support for building trees and verifying inclusion proofs."
+license = "MIT OR Apache-2.0"
+readme = "README.md"
+repository = "https://github.com/LVivona/mrkle"
+keywords = ["hash", "merkle", "proof", "tree"]
+
+[dependencies]
+faster-hex = "0.10.0"
+crypto = { version = "0.5.1", default-features = false, features = ["digest"] }
+thiserror = { version = "2.0.12", default-features = false }
+serde = { version = "1.0.219", default-features = false, features = ["derive"] }
+
+[dev-dependencies]
+sha1 = "0.10.6"
+sha2 = "0.10.9"
+sha3 = "0.10.8"
+bincode = { version = "2.0.1", features = ["serde"] }
+
+[features]
+default = ["std"]
+std = ["thiserror/std"]
+alloc = []
+serde = ["serde/alloc"]
+
+[package.metadata.docs.rs]
+rustdoc-args = ["--html-in-header", "./docs/katex.html"]
