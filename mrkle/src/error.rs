@@ -42,11 +42,8 @@ pub enum TreeError {
     /// A node exists in the tree without a parent.
     ///
     /// All non-root nodes must have exactly one parent.
-    #[error("Node {node} is disjoint (no parent).")]
-    DisjointNode {
-        /// The disjoint node index.
-        node: usize,
-    },
+    #[error("Node is disjoint (no parent).")]
+    DisjointNode,
 
     /// An index was used that is outside the bounds of the tree.
     #[error("Index {index} is out of bounds for tree of length {len}.")]
@@ -99,11 +96,15 @@ pub enum MrkleError {
 /// Errors that may occur when verifying or constructing a Merkle proof.
 #[derive(Debug, thiserror::Error)]
 pub enum ProofError {
+    /// Minimum size of tree length is 2.
+    #[error("Expected a tree length greater then 1.")]
+    InvalidSize,
+
     /// The computed root hash does not match the expected root hash.
     ///
     /// This typically indicates that the leaves are not ordered as expected
     /// or that the data has been tampered with.
-    #[error("expected {expected:?}, found {actual:?}.")]
+    #[error("Expected {expected:?}, found {actual:?}.")]
     RootHashMissMatch {
         /// The expected root hash.
         expected: Vec<u8>,
