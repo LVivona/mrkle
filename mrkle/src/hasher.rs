@@ -61,7 +61,7 @@ pub trait Hasher {
 
     /// Computes the hash of the provided data.
     ///
-    /// # Parameters
+    /// # Arguments
     ///
     /// * `data` - Input data to be hashed. Accepts any type that can be converted
     ///           to a byte slice reference via `AsRef<[u8]>`.
@@ -76,7 +76,7 @@ pub trait Hasher {
     /// This operation is commonly used in Merkle tree construction where parent
     /// nodes are computed by hashing the concatenation of their children's hashes.
     ///
-    /// # Parameters
+    /// # Arguments
     ///
     /// * `lhs` - Left-hand side hash value
     /// * `rhs` - Right-hand side hash value
@@ -91,7 +91,7 @@ pub trait Hasher {
     /// This is a convenience method for hashing multiple hash values in sequence,
     /// useful for operations involving more than two hash inputs.
     ///
-    /// # Parameters
+    /// # Arguments
     ///
     /// * `data` - A slice of hash outputs to be concatenated and hashed
     ///
