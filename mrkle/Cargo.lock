@@ -148,6 +148,7 @@ dependencies = [
  "sha1",
  "sha2",
  "sha3",
+ "text_trees",
  "thiserror",
 ]
 
@@ -243,6 +244,12 @@ dependencies = [
  "quote",
  "unicode-ident",
 ]
+
+[[package]]
+name = "text_trees"
+version = "0.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "419ea7ab2f07ffc59c5e9424bcb73677933940f8bdadbe21649c1584dc06d0cf"
 
 [[package]]
 name = "thiserror"

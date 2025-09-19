@@ -13,6 +13,7 @@ faster-hex = "0.10.0"
 crypto = { version = "0.5.1", default-features = false, features = ["digest"] }
 thiserror = { version = "2.0.12", default-features = false }
 serde = { version = "1.0.219", default-features = false, features = ["derive"] }
+text_trees = "0.1.2"
 
 [dev-dependencies]
 sha1 = "0.10.6"
