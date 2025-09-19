@@ -13,6 +13,7 @@ compile_error!("must choose either the `std` or `alloc` feature");
 
 #[path = "entry.rs"]
 mod borrowed;
+mod proof;
 
 /// Cryptographic hash utilities and traits used in Merkle trees.
 pub mod hasher;
@@ -27,11 +28,12 @@ pub mod tree;
 /// Includes errors for tree construction, hashing, and I/O operations.
 pub mod error;
 
-pub(crate) use crate::error::{EntryError, MrkleError, NodeError, ProofError, TreeError};
+pub(crate) use crate::error::{EntryError, NodeError, ProofError, TreeError};
 pub(crate) use crate::tree::DefaultIx;
 
 pub use crate::hasher::{GenericArray, Hasher, MrkleHasher};
-pub use crate::tree::{IndexType, Iter, IterIdx, Node, NodeIndex, Tree, TreeView};
+pub use crate::proof::{MrkleProof, MrkleProofNode};
+pub use crate::tree::{IndexType, Iter, IterIdx, MutNode, Node, NodeIndex, Tree, TreeView};
 pub use borrowed::*;
 
 #[allow(unused_imports, reason = "future proofing for tree features.")]
@@ -54,6 +56,7 @@ pub(crate) mod prelude {
         pub use std::vec::Vec;
     }
 
+    pub use core::fmt::{Debug, Display};
     pub use core::marker::{Copy, PhantomData};
     pub use core::slice::SliceIndex;
     pub(crate) use crypto::digest::Digest;
@@ -63,7 +66,6 @@ pub(crate) mod prelude {
     pub use stds::*;
 }
 
-use crypto::digest::OutputSizeUser;
 use prelude::*;
 
 /// A generic immutable node in a Merkle Tree.
@@ -491,7 +493,7 @@ impl<T, D: Digest, Ix: IndexType> core::fmt::Debug for MrkleNode<T, D, Ix> {
 }
 
 // Display implementation - user-friendly representation
-impl<T, D: Digest, Ix: IndexType> core::fmt::Display for MrkleNode<T, D, Ix> {
+impl<T, D: Digest, Ix: IndexType> Display for MrkleNode<T, D, Ix> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         let hash_bytes = self.hash.as_slice();
         let hash_preview = if hash_bytes.len() >= 4 {
@@ -506,16 +508,7 @@ impl<T, D: Digest, Ix: IndexType> core::fmt::Display for MrkleNode<T, D, Ix> {
             format!("{:02x?}", hash_bytes)
         };
 
-        if self.is_leaf() {
-            write!(f, "Leaf[hash: {}]", hash_preview)
-        } else {
-            write!(
-                f,
-                "Internal[children: {}, hash: {}]",
-                self.children.len(),
-                hash_preview
-            )
-        }
+        write!(f, "{}", hash_preview)
     }
 }
 
@@ -537,6 +530,22 @@ impl<T, D: Digest, Ix: IndexType> core::fmt::Display for MrkleNode<T, D, Ix> {
 /// * `Ix` - The index type for node references, defaults to [`DefaultIx`]
 ///
 ///
+/// # Example
+///
+/// ```
+/// use mrkle::MrkleTree;
+/// use sha1::Sha1;
+///
+/// // build basic binary merkle tree.
+/// let tree = MrkleTree::<&str, Sha1>::from(vec![
+///     "A",
+///     "B",
+///     "C",
+///     "D",
+///     "E",
+/// ]);
+/// ```
+///
 /// # Security Considerations
 ///
 /// The security of a `MrkleTree` depends entirely on the cryptographic strength
@@ -551,7 +560,7 @@ pub struct MrkleTree<T, D: Digest, Ix: IndexType = DefaultIx> {
     /// This field is private to maintain invariants about the tree structure
     /// and ensure all modifications go through the proper cryptographic
     /// verification process.
-    core: Tree<T, MrkleNode<T, D, Ix>, Ix>,
+    core: Tree<MrkleNode<T, D, Ix>, Ix>,
 }
 
 impl<T, D: Digest> Default for MrkleTree<T, D> {
@@ -567,8 +576,8 @@ where
 {
     /// Constructs a Merkle binary tree from leaf nodes using bottom-up approach.
     ///
-    /// # Parameters
-    /// - `leaves`: Vector of `T` nodes to build the tree from
+    /// # Arguments
+    /// * `leaves` - Vector of `T` nodes to build the tree from
     ///
     /// # Returns
     /// A generic binary [`MrkleTree`]
@@ -664,7 +673,7 @@ impl<T, D: Digest, Ix: IndexType> MrkleTree<T, D, Ix> {
 
     /// Return root [`TreeView`] of the [`MrkleTree`]
     #[inline]
-    pub fn view(&self) -> TreeView<'_, T, MrkleNode<T, D, Ix>, Ix> {
+    pub fn view(&self) -> TreeView<'_, MrkleNode<T, D, Ix>, Ix> {
         self.core.view()
     }
 
@@ -674,17 +683,17 @@ impl<T, D: Digest, Ix: IndexType> MrkleTree<T, D, Ix> {
     pub fn subtree_view(
         &self,
         root: NodeIndex<Ix>,
-    ) -> Option<TreeView<'_, T, MrkleNode<T, D, Ix>, Ix>> {
+    ) -> Option<TreeView<'_, MrkleNode<T, D, Ix>, Ix>> {
         self.core.subtree_view(root)
     }
 
     /// Returns Iterator pattern [`Iter`] which returns a unmutable Node reference.
-    pub fn iter(&self) -> Iter<'_, T, MrkleNode<T, D, Ix>, Ix> {
+    pub fn iter(&self) -> Iter<'_, MrkleNode<T, D, Ix>, Ix> {
         self.core.iter()
     }
 
     ///Returns Iterator pattern [`IterIdx`] which returns a [`NodeIndex<Ix>`] of the node.
-    pub fn iter_idx(&self) -> IterIdx<'_, T, MrkleNode<T, D, Ix>, Ix> {
+    pub fn iter_idx(&self) -> IterIdx<'_, MrkleNode<T, D, Ix>, Ix> {
         self.core.iter_idx()
     }
 }
@@ -697,16 +706,37 @@ where
     pub fn subtree_from_node(
         &self,
         target: &MrkleNode<T, D, Ix>,
-    ) -> Option<TreeView<'_, T, MrkleNode<T, D, Ix>, Ix>> {
+    ) -> Option<TreeView<'_, MrkleNode<T, D, Ix>, Ix>> {
         self.core.subtree_from_node(target)
     }
 }
 
 impl<'a, T, D: Digest, Ix: IndexType> IntoIterator for &'a MrkleTree<T, D, Ix> {
-    type IntoIter = Iter<'a, T, MrkleNode<T, D, Ix>, Ix>;
+    type IntoIter = Iter<'a, MrkleNode<T, D, Ix>, Ix>;
     type Item = &'a MrkleNode<T, D, Ix>;
     fn into_iter(self) -> Self::IntoIter {
         self.iter()
+    }
+}
+
+impl<T, D: Digest, Ix: IndexType> From<Vec<T>> for MrkleTree<T, D, Ix>
+where
+    T: AsRef<[u8]>,
+{
+    fn from(value: Vec<T>) -> Self {
+        MrkleTree::from_leaves(value)
+    }
+}
+
+impl<T, D: Digest, Ix: IndexType> Display for MrkleTree<T, D, Ix> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "{}", self.core)
+    }
+}
+
+impl<T, D: Digest, Ix: IndexType> Debug for MrkleTree<T, D, Ix> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "{}", self.core)
     }
 }
 
@@ -743,7 +773,7 @@ mod test {
     }
 
     #[test]
-    fn test_build_with_mrkel() {
+    fn test_build_with_mrkle() {
         let hasher = MrkleHasher::<sha1::Sha1>::new();
         let node = MrkleNode::<_, sha1::Sha1, usize>::leaf_with_hasher(DATA_PAYLOAD, &hasher);
 
@@ -751,7 +781,7 @@ mod test {
     }
 
     #[test]
-    fn test_build_internal_mrkel_node() {
+    fn test_build_internal_mrkle_node() {
         let hasher = MrkleHasher::<sha1::Sha1>::new();
         let node1 = MrkleNode::<_, sha1::Sha1, usize>::leaf_with_hasher(DATA_PAYLOAD, &hasher);
         let node2 = MrkleNode::<_, sha1::Sha1, usize>::leaf_with_hasher(DATA_PAYLOAD, &hasher);
@@ -794,6 +824,7 @@ mod test {
     fn test_building_binary_tree_base_case() {
         let leaves: Vec<&str> = vec!["A"];
         let tree = MrkleTree::<&str, sha1::Sha1>::from_leaves(leaves);
+        assert!(tree.len() == 2)
     }
 
     #[test]
@@ -810,5 +841,13 @@ mod test {
                 }
             }
         }
+    }
+
+    #[test]
+    #[cfg(feature = "std")]
+    fn test_building_binary_tree_display() {
+        let leaves: Vec<&str> = vec!["A", "B", "C", "D", "E"];
+        let tree = MrkleTree::<&str, sha1::Sha1>::from_leaves(leaves.clone());
+        println!("{tree}");
     }
 }

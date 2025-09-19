@@ -8,7 +8,7 @@ use crate::prelude::*;
 
 pub use borrow::TreeView;
 pub use iter::{Iter, IterIdx};
-pub use node::{BasicNode, IndexType, Node, NodeIndex};
+pub use node::{IndexType, MutNode, Node, NodeIndex};
 
 pub(crate) use node::DefaultIx;
 
@@ -22,7 +22,7 @@ pub(crate) use node::DefaultIx;
 /// - `T`: The type of data stored in each node.
 /// - `N`: The node type, which must implement [`Node<T>`].
 /// - `Ix`: The index type used to address nodes in the tree.
-pub struct Tree<T, N = BasicNode<T>, Ix: IndexType = DefaultIx> {
+pub struct Tree<N: Node<Ix>, Ix: IndexType = DefaultIx> {
     /// The index of the root node, if any.
     ///
     /// This is `None` if the tree is empty or is being built from leaves.
@@ -32,32 +32,27 @@ pub struct Tree<T, N = BasicNode<T>, Ix: IndexType = DefaultIx> {
     ///
     /// Each node is addressed by its [`NodeIndex`].
     pub(crate) nodes: Vec<N>,
-
-    /// Marker for the generic type `T`.
-    phantom: PhantomData<T>,
 }
 
-impl<T, N: Node<Ix>, Ix: IndexType> Tree<T, N, Ix> {
+impl<N: Node<Ix>, Ix: IndexType> Tree<N, Ix> {
     /// Creates an empty tree with no nodes.
     #[inline]
     pub(crate) fn new() -> Self {
         Self {
             root: None,
             nodes: Vec::new(),
-            phantom: PhantomData,
         }
     }
 
     /// Creates an empty tree with pre-allocated capacity for nodes.
     ///
-    /// # Parameters
-    /// - `capacity`: The initial number of nodes to allocate space for.
+    /// # Arguments
+    /// * `capacity` - The initial number of nodes to allocate space for.
     #[inline]
     pub fn with_capacity(capacity: usize) -> Self {
         Self {
             root: None,
             nodes: Vec::with_capacity(capacity),
-            phantom: PhantomData,
         }
     }
 
@@ -122,7 +117,7 @@ impl<T, N: Node<Ix>, Ix: IndexType> Tree<T, N, Ix> {
     }
 
     ///Return root [`TreeView`] of the [`Tree`]
-    pub fn view(&self) -> TreeView<'_, T, N, Ix> {
+    pub fn view(&self) -> TreeView<'_, N, Ix> {
         TreeView::from(self)
     }
 
@@ -135,19 +130,19 @@ impl<T, N: Node<Ix>, Ix: IndexType> Tree<T, N, Ix> {
     /// Returns Iterator pattern [`Iter`] which returns a
     /// unmutable Node reference.
     #[inline]
-    pub fn iter(&self) -> Iter<'_, T, N, Ix> {
+    pub fn iter(&self) -> Iter<'_, N, Ix> {
         self.view().iter()
     }
 
     /// Returns Iterator pattern [`IterIdx`] which returns a
     /// [`NodeIndex<Ix>`] of the node.
     #[inline]
-    pub fn iter_idx(&self) -> IterIdx<'_, T, N, Ix> {
+    pub fn iter_idx(&self) -> IterIdx<'_, N, Ix> {
         self.view().iter_idx()
     }
 
     /// Create a [`TreeView`] from a specific node as root.
-    pub fn subtree_view(&self, root: NodeIndex<Ix>) -> Option<TreeView<'_, T, N, Ix>> {
+    pub fn subtree_view(&self, root: NodeIndex<Ix>) -> Option<TreeView<'_, N, Ix>> {
         // Check if the node exists
         if root.index() >= self.nodes.len() {
             return None;
@@ -177,7 +172,7 @@ impl<T, N: Node<Ix>, Ix: IndexType> Tree<T, N, Ix> {
 
     /// Create a [`TreeView`] from a node reference if found,
     /// else return None.
-    pub fn subtree_from_node(&self, target: &N) -> Option<TreeView<'_, T, N, Ix>>
+    pub fn subtree_from_node(&self, target: &N) -> Option<TreeView<'_, N, Ix>>
     where
         N: PartialEq + Eq,
     {
@@ -191,14 +186,48 @@ impl<T, N: Node<Ix>, Ix: IndexType> Tree<T, N, Ix> {
     }
 }
 
-impl<T, N: Node<Ix>, Ix: IndexType> Default for Tree<T, N, Ix> {
+impl<N: Node<Ix> + Display, Ix: IndexType> Tree<N, Ix> {
+    /// NOTE:
+    /// Power of 10 rules for developing safety-critical code
+    /// [Rule 2](https://en.wikipedia.org/wiki/The_Power_of_10:_Rules_for_Developing_Safety-Critical_Code): All loops must have fixed bounds. This prevents runaway code.
+    /// - In safety-critical systems (like avionics), recursion can lead to unbounded
+    ///   stack growth, making timing and memory usage unpredictable.
+    /// - Static analyzers also have a hard time proving termination and memory bounds for recursive functions.
+    /// - Iterative loops are much easier to analyze, bound, and test for worst-case execution.
+    fn ascii_tree(&self, node: &N) -> text_trees::TreeNode<String> {
+        let mut display = text_trees::TreeNode::new(format!("{}", node));
+
+        for index in node.children() {
+            if let Some(child) = self.get(index.index()) {
+                let d = self.ascii_tree(child);
+                display.push_node(d);
+            }
+        }
+
+        display
+    }
+}
+
+impl<N: Node<Ix> + Display, Ix: IndexType> core::fmt::Display for Tree<N, Ix> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "{}", self.ascii_tree(self.root()))
+    }
+}
+
+impl<N: Node<Ix> + Display, Ix: IndexType> core::fmt::Debug for Tree<N, Ix> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "{}", self.ascii_tree(self.root()))
+    }
+}
+
+impl<N: Node<Ix>, Ix: IndexType> Default for Tree<N, Ix> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<'a, T, N: Node<Ix>, Ix: IndexType> IntoIterator for &'a Tree<T, N, Ix> {
-    type IntoIter = Iter<'a, T, N, Ix>;
+impl<'a, N: Node<Ix>, Ix: IndexType> IntoIterator for &'a Tree<N, Ix> {
+    type IntoIter = Iter<'a, N, Ix>;
     type Item = &'a N;
 
     fn into_iter(self) -> Self::IntoIter {
@@ -209,13 +238,13 @@ impl<'a, T, N: Node<Ix>, Ix: IndexType> IntoIterator for &'a Tree<T, N, Ix> {
 #[cfg(test)]
 mod test {
 
-    use super::BasicNode as Node;
+    use super::node::BasicNode as Node;
     use crate::prelude::*;
     use crate::{NodeIndex, Tree};
 
     #[test]
     fn test_empty_tree_construction() {
-        let tree: Tree<u8> = Tree::new();
+        let tree: Tree<Node<u8>> = Tree::new();
         assert!(tree.is_empty())
     }
 
@@ -223,7 +252,7 @@ mod test {
     fn test_tree_iter() {
         let mut root: Node<String> = Node::new("hello".to_string());
         root.children = vec![NodeIndex::new(1), NodeIndex::new(2)];
-        let mut tree: Tree<String> = Tree::new();
+        let mut tree: Tree<Node<String>> = Tree::new();
         tree.root = Some(NodeIndex::new(0));
         tree.nodes.push(root);
         tree.nodes.push(Node::new("world".to_string()));
@@ -250,7 +279,7 @@ mod test {
     fn test_tree_get() {
         let mut root: Node<String> = Node::new("hello".to_string());
         root.children = vec![NodeIndex::new(1), NodeIndex::new(2)];
-        let mut tree: Tree<String> = Tree::new();
+        let mut tree: Tree<Node<String>> = Tree::new();
         let n1 = Node::new("world".to_string());
         let n2 = Node::new("!".to_string());
         tree.root = Some(NodeIndex::new(0));
@@ -269,7 +298,7 @@ mod test {
     fn test_tree_subtree() {
         let mut root: Node<String> = Node::new("hello".to_string());
         root.children = vec![NodeIndex::new(1), NodeIndex::new(2)];
-        let mut tree: Tree<String> = Tree::new();
+        let mut tree: Tree<Node<String>> = Tree::new();
         tree.root = Some(NodeIndex::new(0));
         tree.nodes.push(root);
         tree.nodes.push(Node::new("world".to_string()));
@@ -284,7 +313,7 @@ mod test {
     fn test_tree_subtree_unordered() {
         let mut root: Node<String> = Node::new("hello".to_string());
         root.children = vec![NodeIndex::new(0), NodeIndex::new(1)];
-        let mut tree: Tree<String> = Tree::new();
+        let mut tree: Tree<Node<String>> = Tree::new();
         let n1 = Node::new("world".to_string());
         let n2 = Node::new("!".to_string());
         tree.root = Some(NodeIndex::new(2));

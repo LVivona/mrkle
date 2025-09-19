@@ -1,3 +1,6 @@
+use crate::prelude::*;
+use crate::{IndexType, NodeIndex};
+
 /// Errors that may occur when performing operations on a [`Node`](crate::tree::Node).
 #[derive(Debug, thiserror::Error)]
 pub enum NodeError {
@@ -115,4 +118,15 @@ pub enum ProofError {
     /// An error occurred while constructing or manipulating a [`Tree`](crate::tree::Tree).
     #[error("{0}")]
     TreeError(#[from] TreeError),
+}
+
+impl ProofError {
+    #[inline]
+    #[allow(dead_code)]
+    pub(crate) fn out_of_bounds<Ix: IndexType>(len: usize, index: NodeIndex<Ix>) -> ProofError {
+        ProofError::from(TreeError::IndexOutOfBounds {
+            index: index.index(),
+            len: len,
+        })
+    }
 }

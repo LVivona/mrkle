@@ -15,18 +15,18 @@ use crate::{IndexType, Node, NodeIndex, TreeView};
 ///
 /// This `struct` is created by the `into_iter` method on [`TreeView`]
 /// (provided by the [`IntoIterator`] trait).
-pub struct Iter<'a, T, N: Node<Ix>, Ix: IndexType> {
+pub struct Iter<'a, N: Node<Ix>, Ix: IndexType> {
     /// internal queue for node reterival.
     queue: VecDeque<NodeIndex<Ix>>,
     /// [`Tree`] reference.
-    inner: TreeView<'a, T, N, Ix>,
+    inner: TreeView<'a, N, Ix>,
     /// stopping flag initiated after root has been
     /// allocated to the queue.
     stop: bool,
 }
 
-impl<'a, T, N: Node<Ix>, Ix: IndexType> Iter<'a, T, N, Ix> {
-    pub(crate) fn new(tree: TreeView<'a, T, N, Ix>) -> Self {
+impl<'a, N: Node<Ix>, Ix: IndexType> Iter<'a, N, Ix> {
+    pub(crate) fn new(tree: TreeView<'a, N, Ix>) -> Self {
         Self {
             queue: VecDeque::from([]),
             inner: tree,
@@ -35,7 +35,7 @@ impl<'a, T, N: Node<Ix>, Ix: IndexType> Iter<'a, T, N, Ix> {
     }
 }
 
-impl<'a, T, N: Node<Ix>, Ix: IndexType> Iterator for Iter<'a, T, N, Ix> {
+impl<'a, N: Node<Ix>, Ix: IndexType> Iterator for Iter<'a, N, Ix> {
     type Item = &'a N;
     fn next(&mut self) -> Option<Self::Item> {
         if let Some(index) = &self.queue.pop_front() {
@@ -57,14 +57,14 @@ impl<'a, T, N: Node<Ix>, Ix: IndexType> Iterator for Iter<'a, T, N, Ix> {
 }
 
 /// An iterator that moves Nodes Index out of a [`TreeView`].
-pub struct IterIdx<'a, T, N: Node<Ix>, Ix: IndexType> {
+pub struct IterIdx<'a, N: Node<Ix>, Ix: IndexType> {
     queue: VecDeque<NodeIndex<Ix>>,
-    inner: TreeView<'a, T, N, Ix>,
+    inner: TreeView<'a, N, Ix>,
     stop: bool,
 }
 
-impl<'a, T, N: Node<Ix>, Ix: IndexType> IterIdx<'a, T, N, Ix> {
-    pub(crate) fn new(tree: TreeView<'a, T, N, Ix>) -> Self {
+impl<'a, N: Node<Ix>, Ix: IndexType> IterIdx<'a, N, Ix> {
+    pub(crate) fn new(tree: TreeView<'a, N, Ix>) -> Self {
         Self {
             queue: VecDeque::from([]),
             inner: tree,
@@ -73,7 +73,7 @@ impl<'a, T, N: Node<Ix>, Ix: IndexType> IterIdx<'a, T, N, Ix> {
     }
 }
 
-impl<T, N: Node<Ix>, Ix: IndexType> Iterator for IterIdx<'_, T, N, Ix> {
+impl<N: Node<Ix>, Ix: IndexType> Iterator for IterIdx<'_, N, Ix> {
     type Item = NodeIndex<Ix>;
     fn next(&mut self) -> Option<Self::Item> {
         if let Some(index) = &self.queue.pop_front() {

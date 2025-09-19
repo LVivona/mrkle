@@ -6,22 +6,19 @@ use crate::prelude::*;
 /// It a borrowed store of a sub-tree containing nodes connected
 /// in a parent-child relationship. Similarly to the [`Tree`].
 #[derive(Debug)]
-pub struct TreeView<'s, T, N: Node<Ix>, Ix: IndexType = DefaultIx> {
+pub struct TreeView<'s, N: Node<Ix>, Ix: IndexType = DefaultIx> {
     /// The index of the root.
     pub(crate) root: NodeIndex<Ix>,
     /// Collection of all node spaning from the root.
     pub(crate) nodes: BTreeMap<NodeIndex<Ix>, &'s N>,
-    /// Marker for the generic type `T`.
-    phantom: PhantomData<T>,
 }
 
-impl<'s, T, N: Node<Ix>, Ix: IndexType> TreeView<'s, T, N, Ix> {
+impl<'s, N: Node<Ix>, Ix: IndexType> TreeView<'s, N, Ix> {
     /// Create an view of the [`Tree`].
     pub(crate) fn new(root: NodeIndex<Ix>, nodes: Vec<(NodeIndex<Ix>, &'s N)>) -> Self {
         Self {
             root,
             nodes: nodes.iter().map(|(idx, node)| (*idx, *node)).collect(),
-            phantom: PhantomData,
         }
     }
 
@@ -53,19 +50,21 @@ impl<'s, T, N: Node<Ix>, Ix: IndexType> TreeView<'s, T, N, Ix> {
 
     /// Returns Iterator pattern [`Iter`] which returns a
     /// unmutable Node reference.
-    pub fn iter(self) -> Iter<'s, T, N, Ix> {
+    pub fn iter(self) -> Iter<'s, N, Ix> {
         Iter::new(self)
     }
 
     /// Returns Iterator pattern [`IterIdx`] which returns a
     /// [`NodeIndex<Ix>`] of the node.
-    pub fn iter_idx(self) -> IterIdx<'s, T, N, Ix> {
+    ///
+    /// # Example
+    pub fn iter_idx(self) -> IterIdx<'s, N, Ix> {
         IterIdx::new(self)
     }
 }
 
-impl<'s, T, N: Node<Ix>, Ix: IndexType> From<&'s Tree<T, N, Ix>> for TreeView<'s, T, N, Ix> {
-    fn from(value: &'s Tree<T, N, Ix>) -> Self {
+impl<'s, N: Node<Ix>, Ix: IndexType> From<&'s Tree<N, Ix>> for TreeView<'s, N, Ix> {
+    fn from(value: &'s Tree<N, Ix>) -> Self {
         let root = value.root.unwrap();
         let root_node: &N = &value.nodes[root.index()];
         let mut nodes: Vec<(NodeIndex<Ix>, &'s N)> = vec![(root, root_node)];
@@ -85,8 +84,8 @@ impl<'s, T, N: Node<Ix>, Ix: IndexType> From<&'s Tree<T, N, Ix>> for TreeView<'s
     }
 }
 
-impl<'s, T, N: Node<Ix>, Ix: IndexType> IntoIterator for TreeView<'s, T, N, Ix> {
-    type IntoIter = Iter<'s, T, N, Ix>;
+impl<'s, N: Node<Ix>, Ix: IndexType> IntoIterator for TreeView<'s, N, Ix> {
+    type IntoIter = Iter<'s, N, Ix>;
     type Item = &'s N;
     fn into_iter(self) -> Self::IntoIter {
         self.iter()
@@ -96,14 +95,15 @@ impl<'s, T, N: Node<Ix>, Ix: IndexType> IntoIterator for TreeView<'s, T, N, Ix> 
 #[cfg(test)]
 mod test {
 
+    use super::super::node::BasicNode as Node;
     use crate::prelude::*;
-    use crate::{NodeIndex, Tree, tree::BasicNode as Node};
+    use crate::{NodeIndex, Tree};
 
     #[test]
     fn test_tree_view_construction() {
         let mut root: Node<String> = Node::new("hello".to_string());
         root.children = vec![NodeIndex::new(1), NodeIndex::new(2)];
-        let mut tree: Tree<String> = Tree::new();
+        let mut tree: Tree<Node<String>> = Tree::new();
 
         tree.root = Some(NodeIndex::new(0));
         tree.nodes.push(root);
