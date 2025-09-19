@@ -1,5 +1,6 @@
 # Define variables
-DOCS_DIR := $(shell pwd)
+ROOT_DIR := $(shell pwd)
+DOCS_DIR := $(shell pwd)/mrkle
 TARGET_DIR := $(DOCS_DIR)/docs
 KATEX_HEADER := $(DOCS_DIR)/docs/katex.html
 
