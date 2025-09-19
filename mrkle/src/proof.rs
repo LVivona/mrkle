@@ -1,10 +1,11 @@
-use crate::{Hasher, MrkleHasher, prelude::*};
+use crate::{NodeError, prelude::*};
 
 use crate::{
-    DefaultIx, Digest, GenericArray, IndexType, MrkleNode, Node, NodeIndex, Tree, TreeError, entry,
-    error::ProofError,
+    DefaultIx, Digest, GenericArray, Hasher, IndexType, MrkleHasher, MrkleNode, MutNode, Node,
+    NodeIndex, ProofError, Tree, TreeError, entry,
 };
 
+///
 #[derive(Debug)]
 pub struct MrkleProofNode<D: Digest, Ix: IndexType> {
     /// The parents of this node, if any.
@@ -49,6 +50,82 @@ impl<D: Digest, Ix: IndexType> MrkleProofNode<D, Ix> {
             self.update(None);
         }
     }
+
+    ///Constructs a new, empty [`MrkleProofNode`] with at least the specified capacity.
+    pub fn with_capacity(capacity: usize) -> Self {
+        Self {
+            parent: None,
+            children: Vec::with_capacity(capacity),
+            hash: None,
+        }
+    }
+}
+
+impl<D: Digest, Ix: IndexType> MutNode<Ix> for MrkleProofNode<D, Ix> {
+    #[inline(always)]
+    fn push(&mut self, index: NodeIndex<Ix>) {
+        self.try_push(index).unwrap()
+    }
+
+    #[inline]
+    fn insert(&mut self, index: usize, child: NodeIndex<Ix>) {
+        self.children.insert(index, child);
+    }
+
+    #[inline]
+    fn pop(&mut self) -> Option<NodeIndex<Ix>> {
+        self.children.pop()
+    }
+
+    #[inline]
+    fn swap(&mut self, a: usize, b: usize) {
+        self.children.swap(a, b);
+    }
+
+    #[inline]
+    fn retain<F>(&mut self, f: F)
+    where
+        F: FnMut(&NodeIndex<Ix>) -> bool,
+    {
+        self.children.retain(f);
+    }
+
+    #[inline]
+    fn remove(&mut self, index: usize) -> NodeIndex<Ix> {
+        self.children.remove(index)
+    }
+
+    #[inline]
+    fn remove_item(&mut self, child: NodeIndex<Ix>) -> bool {
+        if let Some(index) = self.children.iter().position(|&idx| idx == child) {
+            self.children.swap_remove(index);
+            true
+        } else {
+            false
+        }
+    }
+
+    fn set_parent(&mut self, parent: NodeIndex<Ix>) {
+        self.parent = Some(parent);
+    }
+
+    fn take_parent(&mut self) -> Option<NodeIndex<Ix>> {
+        self.parent.take()
+    }
+
+    fn try_push(&mut self, index: NodeIndex<Ix>) -> Result<(), NodeError> {
+        if self.contains(&index) {
+            return Err(NodeError::Duplicate {
+                child: index.index(),
+            });
+        }
+        self.children.push(index);
+        Ok(())
+    }
+
+    fn clear(&mut self) -> Vec<NodeIndex<Ix>> {
+        self.children.drain(..).collect()
+    }
 }
 
 impl<D: Digest, Ix: IndexType> Node<Ix> for MrkleProofNode<D, Ix> {
@@ -67,6 +144,40 @@ impl<T, D: Digest, Ix: IndexType> From<MrkleNode<T, D, Ix>> for MrkleProofNode<D
             parent: value.parent,
             children: value.children,
             hash: Some(value.hash),
+        }
+    }
+}
+
+impl<T, D: Digest, Ix: IndexType> From<&MrkleNode<T, D, Ix>> for MrkleProofNode<D, Ix> {
+    fn from(value: &MrkleNode<T, D, Ix>) -> Self {
+        Self {
+            parent: value.parent,
+            children: Vec::with_capacity(0),
+            hash: Some(value.hash.clone()),
+        }
+    }
+}
+
+// Display implementation - user-friendly representation
+impl<D: Digest, Ix: IndexType> Display for MrkleProofNode<D, Ix> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        if let Some(hash) = &self.hash {
+            let hash_bytes = hash.as_slice();
+            let hash_preview = if hash_bytes.len() >= 4 {
+                format!(
+                    "{:02x}{:02x}...{:02x}{:02x}",
+                    hash_bytes[0],
+                    hash_bytes[1],
+                    hash_bytes[hash_bytes.len() - 2],
+                    hash_bytes[hash_bytes.len() - 1]
+                )
+            } else {
+                format!("{:02x?}", hash_bytes)
+            };
+
+            write!(f, "{}", hash_preview)
+        } else {
+            write!(f, "N/A")
         }
     }
 }
@@ -110,9 +221,7 @@ pub struct MrkleProof<D: Digest, Ix: IndexType = DefaultIx> {
     /// Subset of the [`MrkleTree`] that must be constructed
     /// from the leaf hashes within proved to the merkle proof
     /// to find the root hash of the object.
-    ///
-    /// NOTE: *const u8 filler since we don't use generic trait `T`.
-    pub(crate) core: Tree<*const u8, MrkleProofNode<D, Ix>, Ix>,
+    pub(crate) core: Tree<MrkleProofNode<D, Ix>, Ix>,
     /// Expected root hash that proves that the set of leaves
     /// are within the tree.
     pub(crate) expected: GenericArray<D>,
@@ -122,85 +231,126 @@ pub struct MrkleProof<D: Digest, Ix: IndexType = DefaultIx> {
     pub(crate) valid: Option<bool>,
 }
 
-impl<D: Digest, Ix: IndexType> MrkleProof<D, Ix> {
+impl<D: Digest + Debug, Ix: IndexType> MrkleProof<D, Ix> {
     /// Construct [`MrkleProof`] from pre-constructed [`Tree`]
     /// and the expected public hash from leaves needed to
     /// reconstruct the node.
     pub(crate) fn generate_proof<T>(
-        tree: &Tree<T, MrkleNode<T, D, Ix>, Ix>,
+        tree: &Tree<MrkleNode<T, D, Ix>, Ix>,
         leaf: NodeIndex<Ix>,
     ) -> Result<Self, ProofError> {
+        // NOTE: clean up this slop.
+
         // Get the leaf node and validate it exists and is a leaf
-        let leaf_node = tree.get(leaf.index()).ok_or(TreeError::IndexOutOfBounds {
-            index: leaf.index(),
-            len: tree.len(),
-        })?;
+        let length = tree.len();
+        if length < 1 {
+            return Err(ProofError::InvalidSize);
+        }
+
+        let leaf_node = tree
+            .get(leaf.index())
+            .ok_or(ProofError::out_of_bounds(length, leaf))?;
 
         if !leaf_node.is_leaf() {
             return Err(ProofError::ExpectedLeafHash);
         }
 
-        // // Get the expected root hash
-        // let root = tree.try_root()?;
-        // let expected = root.hash.clone();
+        let expected = if let Ok(node) = tree.try_root() {
+            node.hash.clone()
+        } else {
+            return Err(ProofError::from(TreeError::MissingRoot));
+        };
 
-        // // Collection to store the proof path (siblings only)
-        // let mut proof_path: Vec<MrkleProofNode<D, Ix>> = Vec::new();
-        // let leaves = vec![leaf];
+        // Collect siblings from leaf to root
+        let mut siblings = Vec::new();
+        let mut current = leaf;
 
-        // // Traverse from leaf to root, collecting sibling hashes
-        // let mut current = Some(leaf);
+        while let Some(current_node) = tree.get(current.index()) {
+            if let Some(parent_idx) = current_node.parent {
+                let parent_node = tree
+                    .get(parent_idx.index())
+                    .ok_or(ProofError::out_of_bounds(length, parent_idx))?;
 
-        // while let Some(node_idx) = current {
-        //     if let Some(node) = tree.get(node_idx.index()) {
-        //         // If this node has a parent, we need to find our sibling
-        //         if let Some(parent_idx) = node.parent {
-        //             if let Some(parent_node) = tree.get(parent_idx.index()) {
-        //                 // Find sibling nodes (all children of parent except current node)
-        //                 let siblings: Vec<_> = parent_node
-        //                     .children
-        //                     .iter()
-        //                     .filter(|&&child_idx| child_idx != node_idx)
-        //                     .collect();
+                // Find our position among siblings and collect the others
+                for &sibling_idx in &parent_node.children {
+                    if sibling_idx != current {
+                        let sibling = tree
+                            .get(sibling_idx.index())
+                            .ok_or(ProofError::out_of_bounds(length, sibling_idx))?;
 
-        //                 // Add sibling hashes to proof
-        //                 for &sibling_idx in siblings {
-        //                     if let Some(sibling) = tree.get(sibling_idx.index()) {
-        //                         proof_path.push(MrkleProofNode::new(
-        //                             Some(parent_idx),
-        //                             Vec::new(),
-        //                             Some(sibling.hash.clone()),
-        //                         ));
-        //                     }
-        //                 }
-        //             }
-        //             current = node.parent;
-        //         } else {
-        //             // We've reached the root
-        //             break;
-        //         }
-        //     } else {
-        //         return Err(ProofError::from(TreeError::IndexOutOfBounds {
-        //             index: node_idx.index(),
-        //             len: tree.len(),
-        //         }));
-        //     }
-        // }
-        // // Build the core tree with just the proof path
-        // let mut core = Tree::new();
-        // for (i, proof_node) in proof_path.into_iter().enumerate() {
-        //     if proof_node.is_root() {
-        //         core.root = Some(NodeIndex::new(i));
-        //     }
-        //     core.push(proof_node);
-        // }
+                        siblings.push((sibling.hash.clone(), sibling_idx < current));
+                    }
+                }
+                current = parent_idx;
+            } else {
+                // We've reached the root
+                break;
+            }
+        }
 
-        // Ok(MrkleProof {
-        //     core,
-        //     expected,
-        //     leaves,
-        //     valid: None,
-        // })
+        // Build the proof tree structure
+        let mut proof = Tree::new();
+
+        // Add the leaf node first
+        let leaf_proof_node = MrkleProofNode::new(
+            None, // Will set parent later
+            Vec::new(),
+            Some(leaf_node.hash.clone()),
+        );
+        let leaf_proof_idx = proof.push(leaf_proof_node);
+
+        let mut current_proof_idx = leaf_proof_idx;
+
+        // Build the proof tree from leaf up to root
+        for (sibling_hash, is_left_sibling) in &siblings {
+            // Create sibling node
+            let sibling_proof_node = MrkleProofNode::new(
+                None, // Will set parent later
+                Vec::new(),
+                Some(sibling_hash.clone()),
+            );
+            let sibling_proof_idx = proof.push(sibling_proof_node);
+
+            // Create parent node
+            let mut parent_children = Vec::new();
+            if *is_left_sibling {
+                parent_children.push(sibling_proof_idx);
+                parent_children.push(current_proof_idx);
+            } else {
+                parent_children.push(current_proof_idx);
+                parent_children.push(sibling_proof_idx);
+            }
+
+            let parent_proof_node = MrkleProofNode::new(
+                None, // Will set parent later (or None if this becomes root)
+                parent_children,
+                None, // Internal nodes don't need hash in proof
+            );
+            let parent_proof_idx = proof.push(parent_proof_node);
+
+            // Update parent references
+            proof.get_mut(current_proof_idx.index()).unwrap().parent = Some(parent_proof_idx);
+            proof.get_mut(sibling_proof_idx.index()).unwrap().parent = Some(parent_proof_idx);
+
+            current_proof_idx = parent_proof_idx;
+        }
+
+        // Set the root of the proof tree
+        if !siblings.is_empty() {
+            proof.root = Some(current_proof_idx);
+        } else {
+            proof.root = Some(leaf_proof_idx);
+        }
+
+        // Create leaves vector with the target leaf
+        let leaves = vec![leaf_proof_idx];
+
+        Ok(Self {
+            core: proof,
+            expected,
+            leaves,
+            valid: None,
+        })
     }
 }
 
@@ -224,8 +374,14 @@ impl<D: Digest, Ix: IndexType> MrkleProof<D, Ix> {
             .collect()
     }
 
+    ///
     pub fn get_leaf_mut(&mut self, index: NodeIndex<Ix>) -> Option<&mut MrkleProofNode<D, Ix>> {
-        self.core.get_mut(index.index())
+        let index = self.leaves.get(index.index());
+        if let Some(idx) = index {
+            return self.core.get_mut(idx.index());
+        } else {
+            return None;
+        }
     }
 
     /// Returns if the tree has been validated and return if valid.
@@ -336,8 +492,6 @@ impl<D: Digest, Ix: IndexType> MrkleProof<D, Ix> {
             }
         }
 
-        println!("{:?}", self.core.root);
-
         if let Some(root) = &self.core.root().hash {
             if root == &self.expected {
                 Ok(true)
@@ -350,5 +504,11 @@ impl<D: Digest, Ix: IndexType> MrkleProof<D, Ix> {
         } else {
             unreachable!("By the end of traversal up the tree there should always be a root value.")
         }
+    }
+}
+
+impl<D: Digest, Ix: IndexType> Display for MrkleProof<D, Ix> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "{}", self.core)
     }
 }

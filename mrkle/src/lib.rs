@@ -696,6 +696,14 @@ impl<T, D: Digest, Ix: IndexType> MrkleTree<T, D, Ix> {
     pub fn iter_idx(&self) -> IterIdx<'_, MrkleNode<T, D, Ix>, Ix> {
         self.core.iter_idx()
     }
+
+    /// Generate [`MrkleProof`] from a leaf index within the [`MrkleTree`]
+    pub fn proof_from_leaf(&self, index: NodeIndex<Ix>) -> MrkleProof<D, Ix>
+    where
+        D: Digest + Debug,
+    {
+        MrkleProof::generate_proof(&self.core, index).unwrap()
+    }
 }
 
 impl<T, D: Digest, Ix: IndexType> MrkleTree<T, D, Ix>
@@ -849,5 +857,15 @@ mod test {
         let leaves: Vec<&str> = vec!["A", "B", "C", "D", "E"];
         let tree = MrkleTree::<&str, sha1::Sha1>::from_leaves(leaves.clone());
         println!("{tree}");
+    }
+
+    #[test]
+    fn test_building_binary_tree_proof() {
+        let leaves: Vec<&str> = vec!["A", "B", "C", "D", "E"];
+        let tree = MrkleTree::<&str, sha1::Sha1>::from_leaves(leaves.clone());
+        let mut proof = tree.proof_from_leaf(NodeIndex::new(4));
+        let leaf = proof.get_leaf_mut(NodeIndex::new(0)).unwrap();
+        leaf.update(Some(tree.get(NodeIndex::new(4)).unwrap().hash.clone()));
+        assert!(proof.try_validate_basic().unwrap());
     }
 }
