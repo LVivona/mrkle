@@ -270,15 +270,6 @@ where
 }
 
 impl<T, D: Digest, Ix: IndexType> MrkleNode<T, D, Ix> {
-    /// Return payload value within the leaf node
-    pub fn value(&self) -> Option<&T> {
-        if self.payload.is_leaf() {
-            Some(&self.payload)
-        } else {
-            None
-        }
-    }
-
     /// Creates a new internal (non-leaf) node with the specified children and hash.
     ///
     /// Internal nodes represent the structural components of the Merkle tree that
@@ -333,6 +324,15 @@ impl<T, D: Digest, Ix: IndexType> MrkleNode<T, D, Ix> {
             hash,
         }
     }
+
+    /// Return reference to internal value.
+    pub fn value(&self) -> Option<&T> {
+        if let Payload::Leaf(value) = &self.payload {
+            Some(value)
+        } else {
+            None
+        }
+    }
 }
 
 /// Represents the contents of a node in a Merkle tree.
@@ -374,6 +374,39 @@ impl<T> core::ops::Deref for Payload<T> {
         match self {
             Self::Leaf(value) => value,
             _ => panic!("Can not deref a internal node."),
+        }
+    }
+}
+
+#[cfg(feature = "serde")]
+impl<T> serde::Serialize for Payload<T>
+where
+    T: serde::Serialize,
+{
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        match self {
+            Payload::Leaf(data) => serializer.serialize_some(data),
+            Payload::Internal => serializer.serialize_none(),
+        }
+    }
+}
+
+#[cfg(feature = "serde")]
+impl<'de, T> serde::Deserialize<'de> for Payload<T>
+where
+    T: serde::Deserialize<'de>,
+{
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let opt: Option<T> = Option::deserialize(deserializer)?;
+        match opt {
+            Some(data) => Ok(Payload::Leaf(data)),
+            None => Ok(Payload::Internal),
         }
     }
 }
@@ -512,6 +545,163 @@ impl<T, D: Digest, Ix: IndexType> Display for MrkleNode<T, D, Ix> {
     }
 }
 
+#[cfg(feature = "serde")]
+impl<T, D: Digest, Ix: IndexType> serde::Serialize for MrkleNode<T, D, Ix>
+where
+    T: serde::Serialize,
+    Ix: serde::Serialize,
+{
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        use serde::ser::SerializeStruct;
+        let mut state = serializer.serialize_struct("MrkleNode", 4)?;
+
+        state.serialize_field("hash", &self.hash[..])?;
+        state.serialize_field("parent", &self.parent)?;
+        state.serialize_field("children", &self.children)?;
+        state.serialize_field("payload", &self.payload)?;
+
+        state.end()
+    }
+}
+
+#[cfg(feature = "serde")]
+impl<'de, T, D: Digest, Ix: IndexType> serde::Deserialize<'de> for MrkleNode<T, D, Ix>
+where
+    T: serde::Deserialize<'de>,
+    Ix: serde::Deserialize<'de>,
+{
+    fn deserialize<_D>(deserializer: _D) -> Result<Self, _D::Error>
+    where
+        _D: serde::Deserializer<'de>,
+    {
+        #[derive(serde::Deserialize)]
+        #[serde(field_identifier, rename_all = "lowercase")]
+        enum Field {
+            Payload,
+            Parent,
+            Children,
+            Hash,
+        }
+
+        struct MrkleNodeVisitor<T, D: Digest, Ix: IndexType> {
+            marker: PhantomData<(T, D, Ix)>,
+        }
+        impl<'de, T, D: Digest, Ix: IndexType> serde::de::Visitor<'de> for MrkleNodeVisitor<T, D, Ix>
+        where
+            T: serde::Deserialize<'de>,
+            Ix: serde::Deserialize<'de>,
+        {
+            type Value = MrkleNode<T, D, Ix>;
+
+            fn expecting(&self, formatter: &mut core::fmt::Formatter) -> core::fmt::Result {
+                formatter.write_str("struct MrkleNode")
+            }
+
+            fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
+            where
+                A: serde::de::SeqAccess<'de>,
+            {
+                let hash_layout: Vec<u8> = seq
+                    .next_element()?
+                    .ok_or_else(|| serde::de::Error::invalid_length(0, &self))?;
+
+                let parent: Option<NodeIndex<Ix>> = seq
+                    .next_element()?
+                    .ok_or_else(|| serde::de::Error::invalid_length(1, &self))?;
+
+                let children: Vec<NodeIndex<Ix>> = seq
+                    .next_element()?
+                    .ok_or_else(|| serde::de::Error::invalid_length(2, &self))?;
+
+                let payload: Payload<T> = seq
+                    .next_element()?
+                    .ok_or_else(|| serde::de::Error::invalid_length(3, &self))?;
+
+                let hash: GenericArray<D> =
+                    crypto::digest::generic_array::GenericArray::clone_from_slice(&hash_layout);
+
+                Ok(MrkleNode {
+                    payload,
+                    parent,
+                    children,
+                    hash,
+                })
+            }
+
+            fn visit_map<V>(self, mut map: V) -> Result<MrkleNode<T, D, Ix>, V::Error>
+            where
+                V: serde::de::MapAccess<'de>,
+            {
+                let mut payload = None;
+                let mut parent = None;
+                let mut children = None;
+                let mut hash_bytes: Option<Vec<u8>> = None;
+
+                while let Some(key) = map.next_key()? {
+                    match key {
+                        Field::Payload => {
+                            if payload.is_some() {
+                                return Err(serde::de::Error::duplicate_field("payload"));
+                            }
+                            payload = Some(map.next_value()?);
+                        }
+                        Field::Parent => {
+                            if parent.is_some() {
+                                return Err(serde::de::Error::duplicate_field("parent"));
+                            }
+                            parent = Some(map.next_value()?);
+                        }
+                        Field::Children => {
+                            if children.is_some() {
+                                return Err(serde::de::Error::duplicate_field("children"));
+                            }
+                            children = Some(map.next_value()?);
+                        }
+                        Field::Hash => {
+                            if hash_bytes.is_some() {
+                                return Err(serde::de::Error::duplicate_field("hash"));
+                            }
+                            hash_bytes = Some(map.next_value()?);
+                        }
+                    }
+                }
+
+                let payload = payload.ok_or_else(|| serde::de::Error::missing_field("payload"))?;
+                let parent = parent.ok_or_else(|| serde::de::Error::missing_field("parent"))?;
+                let children =
+                    children.ok_or_else(|| serde::de::Error::missing_field("children"))?;
+                let hash_bytes =
+                    hash_bytes.ok_or_else(|| serde::de::Error::missing_field("hash"))?;
+
+                let hash: GenericArray<D> =
+                    crypto::digest::generic_array::GenericArray::clone_from_slice(&hash_bytes);
+
+                Ok(MrkleNode {
+                    payload,
+                    parent,
+                    children,
+                    hash,
+                })
+            }
+        }
+
+        const FIELDS: &[&str] = &["hash", "parent", "children", "payload"];
+        deserializer.deserialize_struct(
+            "MrkleNode",
+            FIELDS,
+            MrkleNodeVisitor {
+                marker: PhantomData,
+            },
+        )
+    }
+}
+
+unsafe impl<T: Send, D: Digest, Ix: IndexType> Send for MrkleNode<T, D, Ix> {}
+unsafe impl<T: Sync, D: Digest, Ix: IndexType> Sync for MrkleNode<T, D, Ix> {}
+
 /// A cryptographic hash tree data structure.
 ///
 /// A `MrkleNode` is a generic tree data structure where each leaf node represents a data block and each
@@ -563,10 +753,12 @@ pub struct MrkleTree<T, D: Digest, Ix: IndexType = DefaultIx> {
     core: Tree<MrkleNode<T, D, Ix>, Ix>,
 }
 
-impl<T, D: Digest> Default for MrkleTree<T, D> {
+impl<T, D: Digest, Ix: IndexType> Default for MrkleTree<T, D, Ix> {
     /// Build a default `MrkleTree` with an empty tree and a new hasher.
     fn default() -> Self {
-        Self { core: Tree::new() }
+        Self {
+            core: Tree::<_, Ix>::new(),
+        }
     }
 }
 
@@ -677,6 +869,18 @@ impl<T, D: Digest, Ix: IndexType> MrkleTree<T, D, Ix> {
         self.core.view()
     }
 
+    /// Return a vector of  [`NodexIndex<Ix>`], location were the leaves can be index.
+    #[inline]
+    pub fn leaves(&self) -> Vec<NodeIndex<Ix>> {
+        self.core.leaves()
+    }
+
+    /// Return a vector of  [`Node`] references.
+    #[inline]
+    pub fn leaves_ref(&self) -> Vec<&MrkleNode<T, D, Ix>> {
+        self.core.leaves_ref()
+    }
+
     /// Create a [`TreeView`] of the Merkle tree
     /// from a node reference as root if found, else return None.
     #[inline]
@@ -748,6 +952,50 @@ impl<T, D: Digest, Ix: IndexType> Debug for MrkleTree<T, D, Ix> {
     }
 }
 
+impl<T, D: Digest, Ix: IndexType> PartialEq for MrkleTree<T, D, Ix> {
+    fn eq(&self, other: &Self) -> bool {
+        if self.root() != other.root() {
+            return false;
+        }
+
+        self.len() == other.len() && self.iter().eq(other.iter())
+    }
+}
+impl<T, D: Digest, Ix: IndexType> Eq for MrkleTree<T, D, Ix> {}
+
+unsafe impl<T: Send, D: Digest, Ix: IndexType> Send for MrkleTree<T, D, Ix> {}
+unsafe impl<T: Sync, D: Digest, Ix: IndexType> Sync for MrkleTree<T, D, Ix> {}
+
+#[cfg(feature = "serde")]
+impl<T, D: Digest, Ix: IndexType> serde::Serialize for MrkleTree<T, D, Ix>
+where
+    T: serde::Serialize,
+    Ix: serde::Serialize,
+{
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        self.core.serialize(serializer)
+    }
+}
+
+#[cfg(feature = "serde")]
+impl<'de, T, D: Digest, Ix: IndexType> serde::Deserialize<'de> for MrkleTree<T, D, Ix>
+where
+    T: serde::Deserialize<'de>,
+    Ix: serde::Deserialize<'de>,
+{
+    fn deserialize<_D>(deserializer: _D) -> Result<Self, _D::Error>
+    where
+        _D: serde::Deserializer<'de>,
+    {
+        Ok(MrkleTree {
+            core: Tree::<MrkleNode<T, D, Ix>, Ix>::deserialize(deserializer)?,
+        })
+    }
+}
+
 #[cfg(test)]
 mod test {
 
@@ -768,7 +1016,7 @@ mod test {
         let leaf = MrkleNode::<_, sha1::Sha1>::leaf(DATA_PAYLOAD);
         assert!(leaf.is_leaf());
 
-        let hash = MrkleHasher::<sha1::Sha1>::digest(&leaf.hash);
+        let hash = MrkleHasher::<sha1::Sha1>::digest(leaf.hash);
         let internal = MrkleNode::<[u8; 32], sha1::Sha1>::internal(vec![NodeIndex::new(1)], hash);
         assert!(!internal.is_leaf())
     }
@@ -845,7 +1093,7 @@ mod test {
                 if let Some(value) = node.value() {
                     assert!(leaves.contains(value));
                 } else {
-                    assert!(false);
+                    panic!("Failed Test.")
                 }
             }
         }
@@ -860,12 +1108,42 @@ mod test {
     }
 
     #[test]
+    #[allow(clippy::clone_on_copy)]
     fn test_building_binary_tree_proof() {
         let leaves: Vec<&str> = vec!["A", "B", "C", "D", "E"];
         let tree = MrkleTree::<&str, sha1::Sha1>::from_leaves(leaves.clone());
         let mut proof = tree.proof_from_leaf(NodeIndex::new(4));
         let leaf = proof.get_leaf_mut(NodeIndex::new(0)).unwrap();
-        leaf.update(Some(tree.get(NodeIndex::new(4)).unwrap().hash.clone()));
+        let hash = tree.get(NodeIndex::new(4)).unwrap().hash.clone();
+        leaf.update(Some(hash));
         assert!(proof.try_validate_basic().unwrap());
+    }
+
+    #[cfg(feature = "serde")]
+    #[test]
+    fn test_mrkle_node_serde() {
+        let expected = MrkleNode::<[u8; 32], sha1::Sha1>::leaf(DATA_PAYLOAD);
+        let output = bincode::serde::encode_to_vec(&expected, bincode::config::standard()).unwrap();
+
+        let (node, _): (MrkleNode<[u8; 32], sha1::Sha1>, usize) =
+            bincode::serde::decode_from_slice(&output[..], bincode::config::standard()).unwrap();
+
+        assert_eq!(node, expected)
+    }
+
+    #[test]
+    #[allow(clippy::clone_on_copy)]
+    #[cfg(feature = "serde")]
+    fn test_building_binary_tree_serde() {
+        let nodes: Vec<&str> = Vec::from(["a", "b", "c", "d", "e", "f"]);
+        let expected = MrkleTree::<String, sha1::Sha1>::from_leaves(
+            nodes.iter().map(|&node| String::from(node)).collect(),
+        );
+
+        let buffer = bincode::serde::encode_to_vec(&expected, bincode::config::standard()).unwrap();
+        let (tree, _): (MrkleTree<String, sha1::Sha1>, usize) =
+            bincode::serde::decode_from_slice(&buffer[..], bincode::config::standard()).unwrap();
+
+        assert_eq!(expected, tree);
     }
 }

@@ -13,8 +13,8 @@ use crate::{IndexType, Node, NodeIndex, TreeView};
 
 /// An iterator that moves Nodes references out of a [`TreeView`].
 ///
-/// This `struct` is created by the `into_iter` method on [`TreeView`]
-/// (provided by the [`IntoIterator`] trait).
+/// This `struct` Breadth First Search iter is created by the `into_iter`
+///  method on [`TreeView`] (provided by the [`IntoIterator`] trait).
 pub struct Iter<'a, N: Node<Ix>, Ix: IndexType> {
     /// internal queue for node reterival.
     queue: VecDeque<NodeIndex<Ix>>,

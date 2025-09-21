@@ -37,7 +37,7 @@ pub struct Tree<N: Node<Ix>, Ix: IndexType = DefaultIx> {
 impl<N: Node<Ix>, Ix: IndexType> Tree<N, Ix> {
     /// Creates an empty tree with no nodes.
     #[inline]
-    pub(crate) fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             root: None,
             nodes: Vec::new(),
@@ -109,6 +109,24 @@ impl<N: Node<Ix>, Ix: IndexType> Tree<N, Ix> {
     pub fn push(&mut self, node: N) -> NodeIndex<Ix> {
         self.nodes.push(node);
         NodeIndex::new(self.nodes.len() - 1)
+    }
+
+    /// Return a vector of  [`NodexIndex<Ix>`], location were the leaves can be index.
+    pub fn leaves(&self) -> Vec<NodeIndex<Ix>> {
+        self.iter_idx()
+            .filter(|&idx| {
+                self.get(idx.index())
+                    .filter(|node| node.is_leaf())
+                    .is_some()
+            })
+            .collect()
+    }
+
+    /// Return a vector of  [`Node`] references.
+    pub fn leaves_ref(&self) -> Vec<&N> {
+        self.iter_idx()
+            .filter_map(|idx| self.get(idx.index()).filter(|node| node.is_leaf()))
+            .collect()
     }
 
     /// Inserts an [`Node`] at position index within the vector, shifting all elements after it to the right.
@@ -232,6 +250,112 @@ impl<'a, N: Node<Ix>, Ix: IndexType> IntoIterator for &'a Tree<N, Ix> {
 
     fn into_iter(self) -> Self::IntoIter {
         self.iter()
+    }
+}
+
+#[cfg(feature = "serde")]
+impl<N, Ix> serde::Serialize for Tree<N, Ix>
+where
+    N: Node<Ix> + serde::Serialize,
+    Ix: IndexType + serde::Serialize,
+{
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        use serde::ser::SerializeStruct;
+        let mut state = serializer.serialize_struct("TreeCore", 2)?;
+
+        state.serialize_field("root", &self.root)?;
+        state.serialize_field("nodes", &self.nodes)?;
+        state.end()
+    }
+}
+
+#[cfg(feature = "serde")]
+impl<'de, N: Node<Ix>, Ix: IndexType> serde::Deserialize<'de> for Tree<N, Ix>
+where
+    N: serde::Deserialize<'de>,
+    Ix: serde::Deserialize<'de>,
+{
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        #[derive(serde::Deserialize)]
+        #[serde(field_identifier, rename_all = "lowercase")]
+        enum Field {
+            Root,
+            Nodes,
+        }
+
+        struct TreeVisitor<N, Ix> {
+            _marker: PhantomData<(N, Ix)>,
+        }
+
+        impl<'de, N: Node<Ix>, Ix: IndexType> serde::de::Visitor<'de> for TreeVisitor<N, Ix>
+        where
+            N: serde::Deserialize<'de>,
+            Ix: serde::Deserialize<'de>,
+        {
+            type Value = Tree<N, Ix>;
+            fn expecting(&self, formatter: &mut core::fmt::Formatter) -> core::fmt::Result {
+                formatter.write_str("struct Tree")
+            }
+
+            fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
+            where
+                A: serde::de::SeqAccess<'de>,
+            {
+                let root: Option<NodeIndex<Ix>> = seq
+                    .next_element()?
+                    .ok_or_else(|| serde::de::Error::invalid_length(0, &self))?;
+
+                let nodes: Vec<N> = seq
+                    .next_element()?
+                    .ok_or_else(|| serde::de::Error::invalid_length(1, &self))?;
+
+                Ok(Tree { root, nodes })
+            }
+
+            fn visit_map<A>(self, mut map: A) -> Result<Self::Value, A::Error>
+            where
+                A: serde::de::MapAccess<'de>,
+            {
+                let mut root: Option<Option<NodeIndex<Ix>>> = None;
+                let mut nodes: Option<Vec<N>> = None;
+
+                while let Some(key) = map.next_key()? {
+                    match key {
+                        Field::Root => {
+                            if root.is_some() {
+                                return Err(serde::de::Error::duplicate_field("root"));
+                            }
+                            root = Some(map.next_value()?);
+                        }
+                        Field::Nodes => {
+                            if nodes.is_some() {
+                                return Err(serde::de::Error::duplicate_field("nodes"));
+                            }
+                            nodes = Some(map.next_value()?);
+                        }
+                    }
+                }
+                let root = root.ok_or_else(|| serde::de::Error::missing_field("root"))?;
+                let nodes = nodes.ok_or_else(|| serde::de::Error::missing_field("nodes"))?;
+
+                Ok(Tree { root, nodes })
+            }
+        }
+
+        const FEILDS: &[&str] = &["root", "nodes"];
+        deserializer.deserialize_struct(
+            "TreeCore",
+            FEILDS,
+            TreeVisitor {
+                _marker: PhantomData,
+            },
+        )
     }
 }
 
