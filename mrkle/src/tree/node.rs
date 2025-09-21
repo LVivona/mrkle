@@ -128,6 +128,7 @@ impl<Ix: core::fmt::Debug + IndexType> core::fmt::Display for NodeIndex<Ix> {
 /// Cheap indexing data type that allows for fast clone or copy.
 ///
 /// **Refrence**: <https://crates.io/crates/petgraph>
+#[repr(transparent)]
 #[derive(Copy, Clone, Default, PartialEq, Eq, Hash)]
 pub struct NodeIndex<Ix: IndexType>(Ix);
 
@@ -235,19 +236,48 @@ impl From<u8> for NodeIndex<u8> {
     }
 }
 
+#[cfg(feature = "serde")]
+impl<Ix: IndexType> serde::Serialize for NodeIndex<Ix>
+where
+    Ix: serde::Serialize,
+{
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        self.0.serialize(serializer)
+    }
+}
+
+#[cfg(feature = "serde")]
+impl<'de, Ix: IndexType> serde::Deserialize<'de> for NodeIndex<Ix>
+where
+    Ix: serde::Deserialize<'de>,
+{
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let inner = Ix::deserialize(deserializer)?;
+        Ok(NodeIndex(inner))
+    }
+}
+
 /// Trait for mutable operations on Node data types.
 ///
 /// This trait provides methods for modifying node structure, complementing
 /// the read-only operations provided by the [`Node`] trait.
 pub trait MutNode<Ix: IndexType = DefaultIx>: Node<Ix> {
-    /// Sets the parent node index.
+    /// Sets the parent index within in node.
     fn set_parent(&mut self, parent: NodeIndex<Ix>);
 
-    /// Removes and returns the parent node index, if any.
+    /// Removes and returns the parent within the node; if any.
     fn take_parent(&mut self) -> Option<NodeIndex<Ix>>;
 
-    // Children mutation operations (Vec-like API)
-    /// Adds a child node index to the end of the children list.
+    /// Adds a child node index within tree to the end of the children list.
+    ///
+    /// # Panics
+    /// Panics if [`Node`] already exsit within list.
     fn push(&mut self, child: NodeIndex<Ix>);
 
     /// Tries to add a child, returning an error if the operation is invalid.
@@ -285,14 +315,6 @@ pub trait MutNode<Ix: IndexType = DefaultIx>: Node<Ix> {
     /// # Panics
     /// Panics if either index is out of bounds.
     fn swap(&mut self, a: usize, b: usize);
-
-    /// Converts node to leaf by removing all children.
-    ///
-    /// Returns the removed children. For nodes with distinct leaf/internal
-    /// variants, this may perform type conversion.
-    fn into_leaf(&mut self) -> Result<Vec<NodeIndex<Ix>>, NodeError> {
-        Ok(self.clear())
-    }
 
     /// Returns the current capacity for children storage.
     fn capacity(&self) -> usize {
@@ -344,9 +366,8 @@ pub trait Node<Ix: IndexType = DefaultIx> {
     fn children(&self) -> &[NodeIndex<Ix>];
 }
 
-///
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct BasicNode<T, Ix: IndexType = DefaultIx> {
+pub(crate) struct BasicNode<T, Ix: IndexType = DefaultIx> {
     pub(crate) value: T,
     pub(crate) parent: Option<NodeIndex<Ix>>,
     pub(crate) children: Vec<NodeIndex<Ix>>,
