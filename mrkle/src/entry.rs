@@ -1,5 +1,3 @@
-use crypto::digest::Digest;
-
 use crate::prelude::*;
 use crate::{EntryError, IndexType, MrkleNode};
 
@@ -164,6 +162,16 @@ pub struct HexDisplay<'id> {
     inner: &'id entry,
     /// Number of bytes to display in hexadecimal.
     size: usize,
+}
+
+impl core::fmt::Debug for HexDisplay<'_> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(
+            f,
+            "HexDisplay {{ len : {:?}  slice : {:?} }}",
+            self.size, self
+        )
+    }
 }
 
 impl core::fmt::Display for HexDisplay<'_> {
