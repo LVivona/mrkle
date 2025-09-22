@@ -333,6 +333,11 @@ impl<T, D: Digest, Ix: IndexType> MrkleNode<T, D, Ix> {
             None
         }
     }
+
+    /// Return Reference to [`MrkleNode`] hash.
+    pub fn hash(&self) -> &GenericArray<D> {
+        &self.hash
+    }
 }
 
 /// Represents the contents of a node in a Merkle tree.

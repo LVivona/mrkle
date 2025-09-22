@@ -46,10 +46,10 @@ use crate::{
 /// // Obtain mut referecne to leaf \w in proof.
 /// let leaf = proof.get_leaf_mut(NodeIndex::new(0)).unwrap();
 ///
-/// let hash = tree.get(NodeIndex::new(4)).unwrap().hash.clone();
+/// let hash = tree.get(NodeIndex::new(4)).unwrap().hash().clone();
 /// leaf.update(Some(hash));
 ///
-/// assert!(proof.try_validate_basic()?);
+/// assert!(proof.try_validate_basic().unwrap());
 /// ```
 ///
 /// # Security Considerations
@@ -97,7 +97,7 @@ impl<D: Digest, Ix: IndexType> MrkleProofNode<D, Ix> {
     }
 
     /// Update internal hash with new [`GenericArray`].
-    pub(crate) fn update(&mut self, hash: Option<GenericArray<D>>) {
+    pub fn update(&mut self, hash: Option<GenericArray<D>>) {
         self.hash = hash;
     }
 
