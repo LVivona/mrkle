@@ -1,4 +1,5 @@
-use super::{DefaultIx, IndexType, Iter, IterIdx, Node, NodeIndex, Tree};
+use super::iter::{ViewIndexIter, ViewIter};
+use super::{DefaultIx, IndexType, Node, NodeIndex, Tree};
 use crate::prelude::*;
 
 /// [`TreeView`] is a view into the hierachical of [`Tree`].
@@ -50,16 +51,16 @@ impl<'s, N: Node<Ix>, Ix: IndexType> TreeView<'s, N, Ix> {
 
     /// Returns Iterator pattern [`Iter`] which returns a
     /// unmutable Node reference.
-    pub fn iter(self) -> Iter<'s, N, Ix> {
-        Iter::new(self)
+    pub fn iter(self) -> ViewIter<'s, N, Ix> {
+        ViewIter::new(self)
     }
 
     /// Returns Iterator pattern [`IterIdx`] which returns a
     /// [`NodeIndex<Ix>`] of the node.
     ///
     /// # Example
-    pub fn iter_idx(self) -> IterIdx<'s, N, Ix> {
-        IterIdx::new(self)
+    pub fn iter_idx(self) -> ViewIndexIter<'s, N, Ix> {
+        ViewIndexIter::new(self)
     }
 }
 
@@ -75,8 +76,8 @@ impl<'s, N: Node<Ix>, Ix: IndexType> From<&'s Tree<N, Ix>> for TreeView<'s, N, I
         while let Some(idx) = q.pop_front() {
             let node = &value.nodes[idx.index()];
             for child in node.children() {
-                nodes.push((*child, &value.nodes[child.index()]));
-                q.push_back(*child);
+                nodes.push((child, &value.nodes[child.index()]));
+                q.push_back(child);
             }
         }
 
@@ -85,7 +86,7 @@ impl<'s, N: Node<Ix>, Ix: IndexType> From<&'s Tree<N, Ix>> for TreeView<'s, N, I
 }
 
 impl<'s, N: Node<Ix>, Ix: IndexType> IntoIterator for TreeView<'s, N, Ix> {
-    type IntoIter = Iter<'s, N, Ix>;
+    type IntoIter = ViewIter<'s, N, Ix>;
     type Item = &'s N;
     fn into_iter(self) -> Self::IntoIter {
         self.iter()

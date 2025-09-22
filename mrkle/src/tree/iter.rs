@@ -1,97 +1,410 @@
 use crate::prelude::*;
-use core::iter::Iterator;
 
+use super::Tree;
 use crate::{IndexType, Node, NodeIndex, TreeView};
 
-/*
- * TODO:
- * It might be better to create an iterator trait that
- * preforms diffrent types of searchs within the tree
- * allowing for maybe universal tree traversal.
- *
- */
+/// Trait defining traversal order behavior for tree iteration
+pub trait TraversalOrder<Ix: IndexType> {
+    /// The storage type used for this traversal order
+    type Storage: Default;
 
-/// An iterator that moves Nodes references out of a [`TreeView`].
-///
-/// This `struct` Breadth First Search iter is created by the `into_iter`
-///  method on [`TreeView`] (provided by the [`IntoIterator`] trait).
-pub struct Iter<'a, N: Node<Ix>, Ix: IndexType> {
-    /// internal queue for node reterival.
-    queue: VecDeque<NodeIndex<Ix>>,
-    /// [`Tree`] reference.
-    inner: TreeView<'a, N, Ix>,
-    /// stopping flag initiated after root has been
-    /// allocated to the queue.
-    stop: bool,
+    /// Add a single node to storage
+    fn push(storage: &mut Self::Storage, child: NodeIndex<Ix>);
+
+    /// Add children nodes to storage
+    fn extend(storage: &mut Self::Storage, children: impl IntoIterator<Item = NodeIndex<Ix>>);
+
+    /// Remove and return the next node from storage
+    fn pop(storage: &mut Self::Storage) -> Option<NodeIndex<Ix>>;
+
+    /// Check if storage is empty
+    fn is_empty(storage: &Self::Storage) -> bool;
 }
 
-impl<'a, N: Node<Ix>, Ix: IndexType> Iter<'a, N, Ix> {
-    pub(crate) fn new(tree: TreeView<'a, N, Ix>) -> Self {
+/// Breadth-First Search traversal order (FIFO)
+pub struct FIFO;
+
+impl<Ix: IndexType> TraversalOrder<Ix> for FIFO {
+    type Storage = VecDeque<NodeIndex<Ix>>;
+
+    #[inline]
+    fn push(storage: &mut Self::Storage, value: NodeIndex<Ix>) {
+        storage.push_back(value);
+    }
+
+    #[inline]
+    fn extend(storage: &mut Self::Storage, children: impl IntoIterator<Item = NodeIndex<Ix>>) {
+        storage.extend(children);
+    }
+
+    #[inline]
+    fn pop(storage: &mut Self::Storage) -> Option<NodeIndex<Ix>> {
+        storage.pop_front()
+    }
+
+    #[inline]
+    fn is_empty(storage: &Self::Storage) -> bool {
+        storage.is_empty()
+    }
+}
+
+/// Depth-First Search traversal order (LIFO)
+pub struct LIFO;
+
+impl<Ix: IndexType> TraversalOrder<Ix> for LIFO {
+    type Storage = Vec<NodeIndex<Ix>>;
+
+    #[inline]
+    fn push(storage: &mut Self::Storage, value: NodeIndex<Ix>) {
+        storage.push(value);
+    }
+
+    #[inline]
+    fn extend(storage: &mut Self::Storage, children: impl IntoIterator<Item = NodeIndex<Ix>>) {
+        let children: Vec<_> = children.into_iter().collect();
+        storage.extend(children.into_iter().rev());
+    }
+
+    #[inline]
+    fn pop(storage: &mut Self::Storage) -> Option<NodeIndex<Ix>> {
+        storage.pop()
+    }
+
+    #[inline]
+    fn is_empty(storage: &Self::Storage) -> bool {
+        storage.is_empty()
+    }
+}
+
+struct IterState<Storage> {
+    storage: Storage,
+    started: bool,
+}
+
+impl<Storage: Default> IterState<Storage> {
+    #[inline]
+    fn new() -> Self {
         Self {
-            queue: VecDeque::from([]),
-            inner: tree,
-            stop: false,
+            storage: Storage::default(),
+            started: false,
+        }
+    }
+
+    #[inline]
+    fn is_started(&self) -> bool {
+        self.started
+    }
+
+    #[inline]
+    fn start(&mut self) {
+        self.started = true;
+    }
+}
+
+/// Iterator over tree nodes in a specific traversal order
+pub struct Iter<'a, N, Ix, O = FIFO>
+where
+    N: Node<Ix>,
+    Ix: IndexType,
+    O: TraversalOrder<Ix>,
+{
+    state: IterState<O::Storage>,
+    tree: &'a Tree<N, Ix>,
+}
+
+impl<'a, N, Ix, O> Iter<'a, N, Ix, O>
+where
+    N: Node<Ix>,
+    Ix: IndexType,
+    O: TraversalOrder<Ix>,
+{
+    /// Creates a new iterator over the tree with the specified traversal order
+    #[inline]
+    pub fn new(tree: &'a Tree<N, Ix>) -> Self {
+        Self {
+            state: IterState::new(),
+            tree,
+        }
+    }
+
+    /// Returns the remaining number of nodes in the iterator (lower bound)
+    #[inline]
+    pub fn remaining_hint(&self) -> (usize, Option<usize>) {
+        if !self.state.is_started() {
+            (0, Some(self.tree.len()))
+        } else {
+            (0, None)
         }
     }
 }
 
-impl<'a, N: Node<Ix>, Ix: IndexType> Iterator for Iter<'a, N, Ix> {
+impl<'a, N, Ix, O> Iterator for Iter<'a, N, Ix, O>
+where
+    N: Node<Ix>,
+    Ix: IndexType,
+    O: TraversalOrder<Ix>,
+{
     type Item = &'a N;
+
     fn next(&mut self) -> Option<Self::Item> {
-        if let Some(index) = &self.queue.pop_front() {
-            let node = self.inner.get(index)?;
-            if !node.is_leaf() {
-                self.queue.extend(node.children());
+        if !self.state.is_started() {
+            if self.tree.is_empty() {
+                return None;
             }
-            return Some(node);
+
+            if let Some(root) = self.tree.root {
+                O::push(&mut self.state.storage, root);
+                self.state.start();
+            } else {
+                return None;
+            }
         }
-        if self.inner.is_empty() || self.stop {
-            None
-        } else {
-            let root = self.inner.root();
-            self.queue.extend(root.children());
-            self.stop = true;
-            Some(root)
+
+        let index = O::pop(&mut self.state.storage)?;
+        let node = self.tree.get(index.index())?;
+
+        // Add children to storage if not a leaf
+        if !node.is_leaf() {
+            O::extend(&mut self.state.storage, node.children().iter().copied());
+        }
+
+        Some(node)
+    }
+
+    #[inline]
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        self.remaining_hint()
+    }
+}
+
+impl<'a, N, Ix, O> core::iter::FusedIterator for Iter<'a, N, Ix, O>
+where
+    N: Node<Ix>,
+    Ix: IndexType,
+    O: TraversalOrder<Ix>,
+{
+}
+
+/// Iterator over tree node indices in a specific traversal order
+pub struct IndexIter<'a, N, Ix, O = FIFO>
+where
+    N: Node<Ix>,
+    Ix: IndexType,
+    O: TraversalOrder<Ix>,
+{
+    state: IterState<O::Storage>,
+    tree: &'a Tree<N, Ix>,
+}
+
+impl<'a, N, Ix, O> IndexIter<'a, N, Ix, O>
+where
+    N: Node<Ix>,
+    Ix: IndexType,
+    O: TraversalOrder<Ix>,
+{
+    /// Creates a new index iterator over the tree with the specified traversal order
+    #[inline]
+    pub fn new(tree: &'a Tree<N, Ix>) -> Self {
+        Self {
+            state: IterState::new(),
+            tree,
         }
     }
 }
 
-/// An iterator that moves Nodes Index out of a [`TreeView`].
-pub struct IterIdx<'a, N: Node<Ix>, Ix: IndexType> {
-    queue: VecDeque<NodeIndex<Ix>>,
-    inner: TreeView<'a, N, Ix>,
-    stop: bool,
+impl<'a, N, Ix, O> Iterator for IndexIter<'a, N, Ix, O>
+where
+    N: Node<Ix>,
+    Ix: IndexType,
+    O: TraversalOrder<Ix>,
+{
+    type Item = NodeIndex<Ix>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if !self.state.is_started() {
+            if self.tree.is_empty() {
+                return None;
+            }
+
+            if let Some(root) = self.tree.root {
+                O::push(&mut self.state.storage, root);
+                self.state.start();
+            } else {
+                return None;
+            }
+        }
+
+        let index = O::pop(&mut self.state.storage)?;
+
+        if let Some(node) = self.tree.get(index.index()) {
+            if !node.is_leaf() {
+                O::extend(&mut self.state.storage, node.children().iter().copied());
+            }
+        }
+
+        Some(index)
+    }
+
+    #[inline]
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        if !self.state.is_started() {
+            (0, Some(self.tree.len()))
+        } else {
+            (0, None)
+        }
+    }
 }
 
-impl<'a, N: Node<Ix>, Ix: IndexType> IterIdx<'a, N, Ix> {
+impl<'a, N, Ix, O> std::iter::FusedIterator for IndexIter<'a, N, Ix, O>
+where
+    N: Node<Ix>,
+    Ix: IndexType,
+    O: TraversalOrder<Ix>,
+{
+}
+
+/// An iterator that moves Node references out of a [`TreeView`] in a specific traversal order
+pub struct ViewIter<'a, N, Ix, O = FIFO>
+where
+    N: Node<Ix>,
+    Ix: IndexType,
+    O: TraversalOrder<Ix>,
+{
+    state: IterState<O::Storage>,
+    inner: TreeView<'a, N, Ix>,
+}
+
+impl<'a, N, Ix, O> ViewIter<'a, N, Ix, O>
+where
+    N: Node<Ix>,
+    Ix: IndexType,
+    O: TraversalOrder<Ix>,
+{
+    /// Creates a new iterator over the tree view with the specified traversal order
+    #[inline]
     pub(crate) fn new(tree: TreeView<'a, N, Ix>) -> Self {
         Self {
-            queue: VecDeque::from([]),
+            state: IterState::new(),
             inner: tree,
-            stop: false,
         }
     }
 }
 
-impl<N: Node<Ix>, Ix: IndexType> Iterator for IterIdx<'_, N, Ix> {
-    type Item = NodeIndex<Ix>;
+impl<'a, N, Ix, O> Iterator for ViewIter<'a, N, Ix, O>
+where
+    N: Node<Ix>,
+    Ix: IndexType,
+    O: TraversalOrder<Ix>,
+{
+    type Item = &'a N;
+
     fn next(&mut self) -> Option<Self::Item> {
-        if let Some(index) = &self.queue.pop_front() {
-            let node = self.inner.get(index)?;
-            if !node.is_leaf() {
-                self.queue.extend(node.children());
+        if !self.state.is_started() {
+            if self.inner.is_empty() {
+                return None;
             }
-            Some(*index)
+            O::push(&mut self.state.storage, self.inner.root);
+            self.state.start();
+        }
+
+        let index = O::pop(&mut self.state.storage)?;
+        let node = self.inner.get(&index)?;
+
+        if !node.is_leaf() {
+            O::extend(&mut self.state.storage, node.children().iter().copied());
+        }
+
+        Some(node)
+    }
+
+    #[inline]
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        if !self.state.is_started() {
+            (0, Some(self.inner.len()))
         } else {
-            // Possible stop cases where Iterator ends.
-            if self.inner.is_empty() || self.stop {
-                None
-            } else {
-                let root = self.inner.root();
-                self.queue.extend(root.children());
-                self.stop = true;
-                Some(self.inner.root)
-            }
+            (0, None)
         }
     }
+}
+
+impl<'a, N, Ix, O> std::iter::FusedIterator for ViewIter<'a, N, Ix, O>
+where
+    N: Node<Ix>,
+    Ix: IndexType,
+    O: TraversalOrder<Ix>,
+{
+}
+
+/// An iterator that moves Node indices out of a [`TreeView`] in a specific traversal order
+pub struct ViewIndexIter<'a, N, Ix, O = FIFO>
+where
+    N: Node<Ix>,
+    Ix: IndexType,
+    O: TraversalOrder<Ix>,
+{
+    state: IterState<O::Storage>,
+    inner: TreeView<'a, N, Ix>,
+}
+
+impl<'a, N, Ix, O> ViewIndexIter<'a, N, Ix, O>
+where
+    N: Node<Ix>,
+    Ix: IndexType,
+    O: TraversalOrder<Ix>,
+{
+    /// Creates a new index iterator over the tree view with the specified traversal order
+    #[inline]
+    pub(crate) fn new(tree: TreeView<'a, N, Ix>) -> Self {
+        Self {
+            state: IterState::new(),
+            inner: tree,
+        }
+    }
+}
+
+impl<'a, N, Ix, O> Iterator for ViewIndexIter<'a, N, Ix, O>
+where
+    N: Node<Ix>,
+    Ix: IndexType,
+    O: TraversalOrder<Ix>,
+{
+    type Item = NodeIndex<Ix>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if !self.state.is_started() {
+            if self.inner.is_empty() {
+                return None;
+            }
+            let root_index = self.inner.root;
+            O::push(&mut self.state.storage, root_index);
+            self.state.start();
+        }
+
+        let index = O::pop(&mut self.state.storage)?;
+
+        if let Some(node) = self.inner.get(&index) {
+            if !node.is_leaf() {
+                O::extend(&mut self.state.storage, node.children().iter().copied());
+            }
+        }
+
+        Some(index)
+    }
+
+    #[inline]
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        if !self.state.is_started() {
+            (0, Some(self.inner.len()))
+        } else {
+            (0, None)
+        }
+    }
+}
+
+impl<'a, N, Ix, O> core::iter::FusedIterator for ViewIndexIter<'a, N, Ix, O>
+where
+    N: Node<Ix>,
+    Ix: IndexType,
+    O: TraversalOrder<Ix>,
+{
 }

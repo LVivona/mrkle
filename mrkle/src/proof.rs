@@ -41,13 +41,13 @@ use crate::{
 /// let tree = MrkleTree::<&str, Sha256>::from_leaves(leaves);
 ///
 /// // obtain proof for leaf.
-/// let mut proof = tree.proof_from_leaf(NodeIndex::new(4));
+/// let mut proof = tree.generate_proof(NodeIndex::new(4));
 ///
 /// // Obtain mut referecne to leaf \w in proof.
 /// let leaf = proof.get_leaf_mut(NodeIndex::new(0)).unwrap();
 ///
-/// let hash = tree.get(NodeIndex::new(4)).unwrap().hash().clone();
-/// leaf.update(Some(hash));
+/// let hash = tree.get(4).unwrap().hash().clone();
+/// leaf.update(hash);
 ///
 /// assert!(proof.try_validate_basic().unwrap());
 /// ```
@@ -61,10 +61,10 @@ use crate::{
 ///
 /// # See Also
 ///
-/// * [`MrkleTree`] - The main tree structure that generates proof nodes
+/// * [`MrkleTree`](crate::MrkleTree) - The main tree structure that generates proof nodes
 /// * [`MrkleNode`] - Full nodes containing payload data
 /// * [`Digest`] - Trait for cryptographic hash functions
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct MrkleProofNode<D: Digest, Ix: IndexType> {
     /// The parents of this node, if any.
     parent: Option<NodeIndex<Ix>>,
@@ -97,15 +97,15 @@ impl<D: Digest, Ix: IndexType> MrkleProofNode<D, Ix> {
     }
 
     /// Update internal hash with new [`GenericArray`].
-    pub fn update(&mut self, hash: Option<GenericArray<D>>) {
-        self.hash = hash;
+    pub fn update(&mut self, hash: GenericArray<D>) {
+        self.hash = Some(hash);
     }
 
     /// Reset the node to nothing
     #[inline(always)]
     pub(crate) fn reset(&mut self) {
         if self.hash.is_some() {
-            self.update(None);
+            self.hash = None;
         }
     }
 
@@ -191,8 +191,8 @@ impl<D: Digest, Ix: IndexType> Node<Ix> for MrkleProofNode<D, Ix> {
         self.parent
     }
 
-    fn children(&self) -> &[NodeIndex<Ix>] {
-        &self.children
+    fn children(&self) -> Vec<NodeIndex<Ix>> {
+        self.children.clone()
     }
 }
 
@@ -700,7 +700,7 @@ impl<D: Digest, Ix: IndexType> MrkleProof<D, Ix> {
 
                 // safely get mutable reference
                 let node_mut = self.core.get_mut(idx.index()).unwrap();
-                node_mut.update(Some(new_hash));
+                node_mut.update(new_hash);
 
                 // queue parent
                 if let Some(parent) = parent {
@@ -739,23 +739,26 @@ impl<D: Digest, Ix: IndexType> PartialEq for MrkleProof<D, Ix> {
 #[cfg(feature = "serde")]
 impl<D: Digest, Ix: IndexType> serde::Serialize for MrkleProof<D, Ix>
 where
+    D: Clone,
     Ix: serde::Serialize,
 {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: serde::Serializer,
     {
-        use serde::ser::SerializeStruct;
-
         if self.valid.is_some() {
             return Err(serde::ser::Error::custom(
                 "proof node serialization rejected: hash field must be empty for secure transmission",
             ));
         }
-        let mut state = serializer.serialize_struct("MrkleProof", 2)?;
-        state.serialize_field("core", &self.core)?;
-        state.serialize_field("expected", self.expected())?;
-        state.end()
+
+        // NOTE: We can reduce our write by just adding the root with the expected hash.
+        let mut tree: Tree<MrkleProofNode<D, _>, _> = Tree::with_capacity(self.core.len());
+        tree.root = self.core.root;
+        tree.nodes.extend_from_slice(&self.core.nodes);
+        tree.root_mut().update(self.expected.clone());
+
+        tree.serialize(serializer)
     }
 }
 
@@ -768,122 +771,36 @@ where
     where
         _D: serde::Deserializer<'de>,
     {
-        #[derive(serde::Deserialize)]
-        #[serde(field_identifier, rename_all = "lowercase")]
-        enum Field {
-            Core,
-            Expected,
-        }
+        let mut core: Tree<MrkleProofNode<D, Ix>, Ix> = Tree::deserialize(deserializer)?;
 
-        struct MrkleProofVisitor<D: Digest, Ix: IndexType> {
-            marker: PhantomData<(D, Ix)>,
-        }
+        let expected = core
+            .root_mut()
+            .hash
+            .take()
+            .ok_or_else(|| serde::de::Error::custom("Missing root hash"))?;
 
-        impl<'de, D: Digest, Ix: IndexType> serde::de::Visitor<'de> for MrkleProofVisitor<D, Ix>
-        where
-            Ix: serde::Deserialize<'de>,
-        {
-            type Value = MrkleProof<D, Ix>;
-
-            fn expecting(&self, formatter: &mut core::fmt::Formatter) -> core::fmt::Result {
-                formatter.write_str("struct MrkleProof")
-            }
-
-            fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
-            where
-                A: serde::de::SeqAccess<'de>,
-            {
-                let core: Tree<MrkleProofNode<D, Ix>, Ix> = seq
-                    .next_element()?
-                    .ok_or_else(|| serde::de::Error::invalid_length(0, &self))?;
-
-                let buffer: Vec<u8> = seq
-                    .next_element()?
-                    .ok_or_else(|| serde::de::Error::invalid_length(0, &self))?;
-
-                let expected =
-                    crypto::digest::generic_array::GenericArray::clone_from_slice(&buffer);
-
-                let mut leaves = Vec::new();
-
-                for index in core.iter_idx() {
-                    if let Some(node) = core.get(index.index()) {
-                        if node.is_leaf() && node.hash.is_none() {
-                            leaves.push(index);
-                        }
-                    } else {
-                        return Err(serde::de::Error::custom(""));
-                    }
+        // Less checking then using the internal `Tree` function leaves
+        // in that case we would look O(N) then from a sublist we would be
+        // obtaining O(L).
+        //
+        // Total Time Complexity: O(N + L)
+        let mut leaves = Vec::new();
+        for index in core.iter_idx() {
+            if let Some(node) = core.get(index.index()) {
+                if node.is_leaf() && node.hash.is_none() {
+                    leaves.push(index);
                 }
-
-                Ok(MrkleProof {
-                    core,
-                    expected,
-                    leaves,
-                    valid: None,
-                })
-            }
-
-            fn visit_map<A>(self, mut map: A) -> Result<MrkleProof<D, Ix>, A::Error>
-            where
-                A: serde::de::MapAccess<'de>,
-            {
-                let mut core: Option<Tree<MrkleProofNode<D, Ix>, Ix>> = None;
-                let mut expected_bytes: Option<Vec<u8>> = None;
-
-                while let Some(key) = map.next_key()? {
-                    match key {
-                        Field::Core => {
-                            if core.is_some() {
-                                return Err(serde::de::Error::duplicate_field("core"));
-                            }
-                            core = Some(map.next_value()?);
-                        }
-                        Field::Expected => {
-                            if expected_bytes.is_some() {
-                                return Err(serde::de::Error::duplicate_field("expected"));
-                            }
-                            expected_bytes = Some(map.next_value()?);
-                        }
-                    }
-                }
-
-                let core = core.ok_or_else(|| serde::de::Error::missing_field("core"))?;
-                let expected_bytes =
-                    expected_bytes.ok_or_else(|| serde::de::Error::missing_field("expected"))?;
-
-                let expected =
-                    crypto::digest::generic_array::GenericArray::clone_from_slice(&expected_bytes);
-
-                let mut leaves = Vec::new();
-
-                for index in core.iter_idx() {
-                    if let Some(node) = core.get(index.index()) {
-                        if node.is_leaf() && node.hash.is_none() {
-                            leaves.push(index);
-                        }
-                    } else {
-                        return Err(serde::de::Error::custom(""));
-                    }
-                }
-
-                Ok(MrkleProof {
-                    core,
-                    leaves,
-                    expected,
-                    valid: None,
-                })
+            } else {
+                return Err(serde::de::Error::custom(""));
             }
         }
 
-        const FIELDS: &[&str] = &["core", "expected"];
-        deserializer.deserialize_struct(
-            "MrkleProof",
-            FIELDS,
-            MrkleProofVisitor {
-                marker: PhantomData,
-            },
-        )
+        Ok(MrkleProof {
+            core,
+            leaves,
+            expected,
+            valid: None,
+        })
     }
 }
 
@@ -901,12 +818,20 @@ mod test {
         let tree: MrkleTree<String, Sha1> =
             MrkleTree::from_leaves(nodes.iter().map(|&v| String::from(v)).collect());
 
-        let proof = tree.proof_from_leaf(NodeIndex::new(0));
+        println!("tree full: \n{tree}");
+
+        let mut proof = tree.generate_proof(NodeIndex::new(0));
+
+        let leaf = proof.get_leaf_mut(NodeIndex::new(0)).unwrap();
+        println!("{leaf}");
+        println!("proof: \n{proof}");
 
         let buffer = bincode::serde::encode_to_vec(&proof, bincode::config::standard()).unwrap();
 
         let (expected, _): (MrkleProof<Sha1>, usize) =
             bincode::serde::decode_from_slice(&buffer, bincode::config::standard()).unwrap();
+
+        println!("expected: \n{expected}");
 
         assert_eq!(expected, proof)
     }

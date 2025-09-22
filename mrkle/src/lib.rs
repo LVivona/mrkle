@@ -1,4 +1,7 @@
 #![deny(missing_docs)]
+#![doc(
+    html_logo_url = "https://raw.githubusercontent.com/LVivona/mrkle/refs/heads/main/.github/assets/logo.png"
+)]
 #![doc = include_str!("../DOC_README.md")]
 #![cfg_attr(not(feature = "std"), no_std)]
 
@@ -33,7 +36,7 @@ pub(crate) use crate::tree::DefaultIx;
 
 pub use crate::hasher::{GenericArray, Hasher, MrkleHasher};
 pub use crate::proof::{MrkleProof, MrkleProofNode};
-pub use crate::tree::{IndexType, Iter, IterIdx, MutNode, Node, NodeIndex, Tree, TreeView};
+pub use crate::tree::{IndexIter, IndexType, Iter, MutNode, Node, NodeIndex, Tree, TreeView};
 pub use borrowed::*;
 
 #[allow(unused_imports, reason = "future proofing for tree features.")]
@@ -41,6 +44,7 @@ pub(crate) mod prelude {
     #[cfg(not(feature = "std"))]
     mod no_stds {
         pub use alloc::borrow::{Borrow, Cow, ToOwned};
+        pub use alloc::boxed::Box;
         pub use alloc::collections::{BTreeMap, VecDeque};
         pub use alloc::str;
         pub use alloc::string::{String, ToString};
@@ -50,6 +54,7 @@ pub(crate) mod prelude {
     #[cfg(feature = "std")]
     mod stds {
         pub use std::borrow::{Borrow, Cow, ToOwned};
+        pub use std::boxed::Box;
         pub use std::collections::{BTreeMap, VecDeque};
         pub use std::str;
         pub use std::string::{String, ToString};
@@ -338,19 +343,24 @@ impl<T, D: Digest, Ix: IndexType> MrkleNode<T, D, Ix> {
     pub fn hash(&self) -> &GenericArray<D> {
         &self.hash
     }
+
+    /// Return a [`HexDisplay`] of the node hash.
+    pub fn to_hex(&self) -> HexDisplay<'_> {
+        entry::from_bytes(&self.hash[..]).to_hex()
+    }
 }
 
 /// Represents the contents of a node in a Merkle tree.
 ///
-/// A node can either be:
+/// This distinction is important for Merkle tree construction, since leaves anchor the
+/// tree with actual data, while internal nodes serve as structural parents combining
+/// child hashes.
+///
+/// # Variants
 /// - [`Payload::Leaf`] — containing the original data payload (e.g. a block, record, or chunk of bytes),
 ///   which is hashed directly to form the leaf hash.
 /// - [`Payload::Internal`] — representing an internal (non-leaf) node, which does not
 ///   store data directly but derives its hash from its child nodes.
-///
-/// This distinction is important for Merkle tree construction, since leaves anchor the
-/// tree with actual data, while internal nodes serve as structural parents combining
-/// child hashes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Payload<T> {
     /// A leaf node containing a payload value.
@@ -453,8 +463,8 @@ impl<T, D: Digest, Ix: IndexType> Node<Ix> for MrkleNode<T, D, Ix> {
     }
 
     #[inline]
-    fn children(&self) -> &[NodeIndex<Ix>] {
-        &self.children
+    fn children(&self) -> Vec<NodeIndex<Ix>> {
+        self.children.clone()
     }
 
     #[inline]
@@ -722,7 +732,7 @@ unsafe impl<T: Sync, D: Digest, Ix: IndexType> Sync for MrkleNode<T, D, Ix> {}
 ///
 /// * `T` - The type of data stored in leaf nodes
 /// * `D` - The digest algorithm implementing [`Digest`] trait (e.g., SHA-256)
-/// * `Ix` - The index type for node references, defaults to [`DefaultIx`]
+/// * `Ix` - The index type for node references, defaults to `DefaultIx`
 ///
 ///
 /// # Example
@@ -747,8 +757,7 @@ unsafe impl<T: Sync, D: Digest, Ix: IndexType> Sync for MrkleNode<T, D, Ix> {}
 /// of the chosen digest algorithm `D`. Using weak or broken hash functions
 /// compromises the tree's integrity guarantees.
 ///
-/// [`Digest`]: crypto::digest::Digest
-/// [`DefaultIx`]: DefaultIx
+#[must_use]
 pub struct MrkleTree<T, D: Digest, Ix: IndexType = DefaultIx> {
     /// The underlying tree data structure.
     ///
@@ -759,7 +768,19 @@ pub struct MrkleTree<T, D: Digest, Ix: IndexType = DefaultIx> {
 }
 
 impl<T, D: Digest, Ix: IndexType> Default for MrkleTree<T, D, Ix> {
-    /// Build a default `MrkleTree` with an empty tree and a new hasher.
+    /// Construct a new default `MrkleTree`.
+    ///
+    /// The tree will not allocate until tree has been build. since the object
+    /// is immutable when construction we can not push nodeds onto the tree.
+    ///
+    /// #  Examples
+    ///
+    /// ```
+    /// use mrkle::MrkleTree;
+    /// use sha1::Sha1;
+    ///
+    /// let tree: MrkleTree<u8, Sha1> = MrkleTree::default();
+    /// ```
     fn default() -> Self {
         Self {
             core: Tree::<_, Ix>::new(),
@@ -771,7 +792,7 @@ impl<T, D: Digest, Ix: IndexType> MrkleTree<T, D, Ix>
 where
     T: AsRef<[u8]>,
 {
-    /// Constructs a Merkle binary tree from leaf nodes using bottom-up approach.
+    /// Constructs a `MrkleTree` from leaf nodes.
     ///
     /// # Arguments
     /// * `leaves` - Vector of `T` nodes to build the tree from
@@ -810,10 +831,9 @@ where
             let leaf_idx = tree.push(leaf);
 
             let hash = hasher.hash(&hash);
-            let root_idx = tree.push(MrkleNode::internal(vec![leaf_idx], hash));
-
+            let root = MrkleNode::internal(vec![leaf_idx], hash);
+            let root_idx = tree.push(root);
             tree.nodes[leaf_idx.index()].parent = Some(root_idx);
-            tree.nodes[root_idx.index()].children.push(leaf_idx);
             tree.root = Some(root_idx);
 
             return Self { core: tree };
@@ -846,9 +866,19 @@ where
 }
 
 impl<T, D: Digest, Ix: IndexType> MrkleTree<T, D, Ix> {
-    /// Return [`Tree`] root refrecne.
+    /// Return [`Tree`] root node [`MrkleNode`] refrecne.
     pub fn root(&self) -> &MrkleNode<T, D, Ix> {
         self.core.root()
+    }
+
+    /// Return reference to root [`GenericArray<D>`].
+    pub fn root_hash(&self) -> &GenericArray<D> {
+        &self.core.root().hash
+    }
+
+    /// Return reference to root [`HexDisplay<'_>`].
+    pub fn root_hex(&self) -> HexDisplay<'_> {
+        self.core.root().to_hex()
     }
 
     /// Returns `true` if the tree contains no nodes.
@@ -864,8 +894,11 @@ impl<T, D: Digest, Ix: IndexType> MrkleTree<T, D, Ix> {
     }
 
     /// Returns a reference to an element [`MrkleNode<T, D, Ix>`].
-    pub fn get(&self, index: NodeIndex<Ix>) -> Option<&MrkleNode<T, D, Ix>> {
-        self.core.get(index.index())
+    pub fn get<I>(&self, index: I) -> Option<&<I as SliceIndex<[MrkleNode<T, D, Ix>]>>::Output>
+    where
+        I: SliceIndex<[MrkleNode<T, D, Ix>]>,
+    {
+        self.core.get(index)
     }
 
     /// Return root [`TreeView`] of the [`MrkleTree`]
@@ -874,7 +907,7 @@ impl<T, D: Digest, Ix: IndexType> MrkleTree<T, D, Ix> {
         self.core.view()
     }
 
-    /// Return a vector of  [`NodexIndex<Ix>`], location were the leaves can be index.
+    /// Return a vector of  [`NodeIndex<Ix>`].
     #[inline]
     pub fn leaves(&self) -> Vec<NodeIndex<Ix>> {
         self.core.leaves()
@@ -902,14 +935,14 @@ impl<T, D: Digest, Ix: IndexType> MrkleTree<T, D, Ix> {
     }
 
     ///Returns Iterator pattern [`IterIdx`] which returns a [`NodeIndex<Ix>`] of the node.
-    pub fn iter_idx(&self) -> IterIdx<'_, MrkleNode<T, D, Ix>, Ix> {
+    pub fn iter_idx(&self) -> IndexIter<'_, MrkleNode<T, D, Ix>, Ix> {
         self.core.iter_idx()
     }
 
     /// Generate [`MrkleProof`] from a leaf index within the [`MrkleTree`]
-    pub fn proof_from_leaf(&self, index: NodeIndex<Ix>) -> MrkleProof<D, Ix>
+    pub fn generate_proof(&self, index: NodeIndex<Ix>) -> MrkleProof<D, Ix>
     where
-        D: Digest + Debug,
+        D: Debug,
     {
         MrkleProof::generate_proof(&self.core, index).unwrap()
     }
@@ -942,6 +975,33 @@ where
 {
     fn from(value: Vec<T>) -> Self {
         MrkleTree::from_leaves(value)
+    }
+}
+
+impl<T, D: Digest, Ix: IndexType, const N: usize> From<&[T; N]> for MrkleTree<T, D, Ix>
+where
+    T: AsRef<[u8]> + Clone,
+{
+    fn from(value: &[T; N]) -> Self {
+        MrkleTree::from_leaves(value.to_vec())
+    }
+}
+
+impl<T, D: Digest, Ix: IndexType> From<VecDeque<T>> for MrkleTree<T, D, Ix>
+where
+    T: AsRef<[u8]>,
+{
+    fn from(value: VecDeque<T>) -> Self {
+        MrkleTree::from_leaves(value.into())
+    }
+}
+
+impl<T, D: Digest, Ix: IndexType> From<Box<[T]>> for MrkleTree<T, D, Ix>
+where
+    T: AsRef<[u8]>,
+{
+    fn from(value: Box<[T]>) -> Self {
+        MrkleTree::from_leaves(value.into_vec())
     }
 }
 
@@ -1085,7 +1145,8 @@ mod test {
     fn test_building_binary_tree_base_case() {
         let leaves: Vec<&str> = vec!["A"];
         let tree = MrkleTree::<&str, sha1::Sha1>::from_leaves(leaves);
-        assert!(tree.len() == 2)
+        assert!(tree.len() == 2);
+        assert!(tree.leaves().len() == 1);
     }
 
     #[test]
@@ -1117,10 +1178,10 @@ mod test {
     fn test_building_binary_tree_proof() {
         let leaves: Vec<&str> = vec!["A", "B", "C", "D", "E"];
         let tree = MrkleTree::<&str, sha1::Sha1>::from_leaves(leaves.clone());
-        let mut proof = tree.proof_from_leaf(NodeIndex::new(4));
+        let mut proof = tree.generate_proof(NodeIndex::new(4));
         let leaf = proof.get_leaf_mut(NodeIndex::new(0)).unwrap();
-        let hash = tree.get(NodeIndex::new(4)).unwrap().hash.clone();
-        leaf.update(Some(hash));
+        let hash = tree.get(4).unwrap().hash().clone();
+        leaf.update(hash);
         assert!(proof.try_validate_basic().unwrap());
     }
 

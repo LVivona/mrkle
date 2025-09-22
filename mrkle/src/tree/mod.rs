@@ -7,7 +7,7 @@ use crate::TreeError;
 use crate::prelude::*;
 
 pub use borrow::TreeView;
-pub use iter::{Iter, IterIdx};
+pub use iter::{IndexIter, Iter};
 pub use node::{IndexType, MutNode, Node, NodeIndex};
 
 pub(crate) use node::DefaultIx;
@@ -71,6 +71,18 @@ impl<N: Node<Ix>, Ix: IndexType> Tree<N, Ix> {
         self.try_root().unwrap()
     }
 
+    /// Returns a mutable reference to the root node.
+    ///
+    /// # Panics
+    /// If the tree does not have a root.
+    #[inline]
+    pub fn root_mut(&mut self) -> &mut N
+    where
+        N: MutNode<Ix>,
+    {
+        self.try_root_mut().unwrap()
+    }
+
     /// Attempts to return a reference to the root node.
     ///
     /// # Returns
@@ -79,6 +91,25 @@ impl<N: Node<Ix>, Ix: IndexType> Tree<N, Ix> {
     pub fn try_root(&self) -> Result<&N, TreeError> {
         if let Some(idx) = self.root {
             Ok(&self.nodes[idx.index()])
+        } else {
+            // NOTE: The only occurance of this would likely happen
+            // if programmer had straight access to the Tree data
+            // structure in construction.
+            Err(TreeError::MissingRoot)
+        }
+    }
+
+    /// Attempts to return a mutable reference to the root node.
+    ///
+    /// # Returns
+    /// - `Ok(&N)` if a root exists.
+    /// - `Err(TreeError::MissingRoot)` if the tree has no root.
+    pub fn try_root_mut(&mut self) -> Result<&mut N, TreeError>
+    where
+        N: MutNode<Ix>,
+    {
+        if let Some(idx) = self.root {
+            Ok(&mut self.nodes[idx.index()])
         } else {
             // NOTE: The only occurance of this would likely happen
             // if programmer had straight access to the Tree data
@@ -111,12 +142,12 @@ impl<N: Node<Ix>, Ix: IndexType> Tree<N, Ix> {
         NodeIndex::new(self.nodes.len() - 1)
     }
 
-    /// Return a vector of  [`NodexIndex<Ix>`], location were the leaves can be index.
+    /// Return a vector of  [`NodeIndex<Ix>`], location were the leaves can be index.
     pub fn leaves(&self) -> Vec<NodeIndex<Ix>> {
         self.iter_idx()
             .filter(|&idx| {
                 self.get(idx.index())
-                    .filter(|node| node.is_leaf())
+                    .filter(|&node| node.is_leaf())
                     .is_some()
             })
             .collect()
@@ -149,14 +180,14 @@ impl<N: Node<Ix>, Ix: IndexType> Tree<N, Ix> {
     /// unmutable Node reference.
     #[inline]
     pub fn iter(&self) -> Iter<'_, N, Ix> {
-        self.view().iter()
+        Iter::new(&self)
     }
 
     /// Returns Iterator pattern [`IterIdx`] which returns a
     /// [`NodeIndex<Ix>`] of the node.
     #[inline]
-    pub fn iter_idx(&self) -> IterIdx<'_, N, Ix> {
-        self.view().iter_idx()
+    pub fn iter_idx(&self) -> IndexIter<'_, N, Ix> {
+        IndexIter::new(&self)
     }
 
     /// Create a [`TreeView`] from a specific node as root.
@@ -179,8 +210,8 @@ impl<N: Node<Ix>, Ix: IndexType> Tree<N, Ix> {
             for child_idx in current_node.children() {
                 if child_idx.index() < self.nodes.len() {
                     let child_node = &self.nodes[child_idx.index()];
-                    nodes.push((*child_idx, child_node));
-                    queue.push_back(*child_idx);
+                    nodes.push((child_idx, child_node));
+                    queue.push_back(child_idx);
                 }
             }
         }
@@ -195,7 +226,7 @@ impl<N: Node<Ix>, Ix: IndexType> Tree<N, Ix> {
         N: PartialEq + Eq,
     {
         // Find the index of the target node
-        for idx in IterIdx::new(self.view()) {
+        for idx in IndexIter::<_, _>::new(self) {
             if &self.nodes[idx.index()] == target {
                 return self.subtree_view(idx);
             }
