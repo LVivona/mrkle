@@ -64,7 +64,7 @@ pub trait Hasher {
     /// # Arguments
     ///
     /// * `data` - Input data to be hashed. Accepts any type that can be converted
-    ///           to a byte slice reference via `AsRef<[u8]>`.
+    ///   to a byte slice reference via `AsRef<[u8]>`.
     ///
     /// # Returns
     ///
