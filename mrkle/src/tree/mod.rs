@@ -7,7 +7,7 @@ use crate::TreeError;
 use crate::prelude::*;
 
 pub use borrow::TreeView;
-pub use iter::{IndexIter, Iter};
+pub use iter::{Fifo, IndexIter, Iter, Lifo, TraversalOrder};
 pub use node::{IndexType, MutNode, Node, NodeIndex};
 
 pub(crate) use node::DefaultIx;
