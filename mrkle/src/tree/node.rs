@@ -363,7 +363,7 @@ pub trait Node<Ix: IndexType = DefaultIx> {
     fn parent(&self) -> Option<NodeIndex<Ix>>;
 
     /// Return set of children within `Node`.
-    fn children(&self) -> &[NodeIndex<Ix>];
+    fn children(&self) -> Vec<NodeIndex<Ix>>;
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -399,8 +399,8 @@ impl<T, Ix: IndexType> Node<Ix> for BasicNode<T, Ix> {
     }
 
     #[inline]
-    fn children(&self) -> &[NodeIndex<Ix>] {
-        &self.children
+    fn children(&self) -> Vec<NodeIndex<Ix>> {
+        self.children.clone()
     }
 
     #[inline]
