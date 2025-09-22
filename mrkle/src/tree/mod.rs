@@ -119,7 +119,7 @@ impl<N: Node<Ix>, Ix: IndexType> Tree<N, Ix> {
     }
 
     /// Returns a reference to an element [`Node`] or subslice depending on the type of index.
-    pub fn get<I>(&self, idx: I) -> Option<&<I as SliceIndex<[N]>>::Output>
+    pub fn get<I>(&self, idx: I) -> Option<&I::Output>
     where
         I: SliceIndex<[N]>,
     {
@@ -180,14 +180,14 @@ impl<N: Node<Ix>, Ix: IndexType> Tree<N, Ix> {
     /// unmutable Node reference.
     #[inline]
     pub fn iter(&self) -> Iter<'_, N, Ix> {
-        Iter::new(&self)
+        Iter::new(self)
     }
 
     /// Returns Iterator pattern [`IterIdx`] which returns a
     /// [`NodeIndex<Ix>`] of the node.
     #[inline]
     pub fn iter_idx(&self) -> IndexIter<'_, N, Ix> {
-        IndexIter::new(&self)
+        IndexIter::new(self)
     }
 
     /// Create a [`TreeView`] from a specific node as root.

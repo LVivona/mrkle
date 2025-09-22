@@ -894,7 +894,7 @@ impl<T, D: Digest, Ix: IndexType> MrkleTree<T, D, Ix> {
     }
 
     /// Returns a reference to an element [`MrkleNode<T, D, Ix>`].
-    pub fn get<I>(&self, index: I) -> Option<&<I as SliceIndex<[MrkleNode<T, D, Ix>]>>::Output>
+    pub fn get<I>(&self, index: I) -> Option<&I::Output>
     where
         I: SliceIndex<[MrkleNode<T, D, Ix>]>,
     {

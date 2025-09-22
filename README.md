@@ -25,3 +25,28 @@ This data structure enables efficient and secure verification that a data elemen
 * File Systems: Git uses Merkle Trees to track changes and verify repository integrity
 * Database Verification: Ensure data hasn't been tampered with
 * Peer-to-Peer Networks: Verify chunks of data in distributed file sharing
+
+
+### Example
+
+Construct a basic binary Merkle Tree by chunking data into byte slices:
+
+```rust
+use mrkle::MrkleTree;
+use sha2::Sha256;
+
+// Input data (could also be read from a file)
+let data = b"The quick brown fox jumps over the lazy dog. \
+                 This is some extra data to make it larger. \
+                 Merkle trees are cool!";
+
+// Split into fixed-size chunks
+let chunk_size = 16;
+let chunks: Vec<&[u8]> = data.chunks(chunk_size).collect();
+
+// Build the Merkle tree from chunks
+let tree = MrkleTree::<&[u8], Sha256>::from_leaves(chunks);
+
+// Get the Merkle root
+let root = tree.root();
+```

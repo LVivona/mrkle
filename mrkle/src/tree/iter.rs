@@ -21,10 +21,10 @@ pub trait TraversalOrder<Ix: IndexType> {
     fn is_empty(storage: &Self::Storage) -> bool;
 }
 
-/// Breadth-First Search traversal order (FIFO)
-pub struct FIFO;
+/// Breadth-First Search traversal order (Fifo)
+pub struct Fifo;
 
-impl<Ix: IndexType> TraversalOrder<Ix> for FIFO {
+impl<Ix: IndexType> TraversalOrder<Ix> for Fifo {
     type Storage = VecDeque<NodeIndex<Ix>>;
 
     #[inline]
@@ -48,10 +48,10 @@ impl<Ix: IndexType> TraversalOrder<Ix> for FIFO {
     }
 }
 
-/// Depth-First Search traversal order (LIFO)
-pub struct LIFO;
+/// Depth-First Search traversal order (Lifo)
+pub struct Lifo;
 
-impl<Ix: IndexType> TraversalOrder<Ix> for LIFO {
+impl<Ix: IndexType> TraversalOrder<Ix> for Lifo {
     type Storage = Vec<NodeIndex<Ix>>;
 
     #[inline]
@@ -102,7 +102,7 @@ impl<Storage: Default> IterState<Storage> {
 }
 
 /// Iterator over tree nodes in a specific traversal order
-pub struct Iter<'a, N, Ix, O = FIFO>
+pub struct Iter<'a, N, Ix, O = Fifo>
 where
     N: Node<Ix>,
     Ix: IndexType,
@@ -177,7 +177,7 @@ where
     }
 }
 
-impl<'a, N, Ix, O> core::iter::FusedIterator for Iter<'a, N, Ix, O>
+impl<N, Ix, O> core::iter::FusedIterator for Iter<'_, N, Ix, O>
 where
     N: Node<Ix>,
     Ix: IndexType,
@@ -186,7 +186,7 @@ where
 }
 
 /// Iterator over tree node indices in a specific traversal order
-pub struct IndexIter<'a, N, Ix, O = FIFO>
+pub struct IndexIter<'a, N, Ix, O = Fifo>
 where
     N: Node<Ix>,
     Ix: IndexType,
@@ -212,7 +212,7 @@ where
     }
 }
 
-impl<'a, N, Ix, O> Iterator for IndexIter<'a, N, Ix, O>
+impl<N, Ix, O> Iterator for IndexIter<'_, N, Ix, O>
 where
     N: Node<Ix>,
     Ix: IndexType,
@@ -255,7 +255,7 @@ where
     }
 }
 
-impl<'a, N, Ix, O> std::iter::FusedIterator for IndexIter<'a, N, Ix, O>
+impl<N, Ix, O> std::iter::FusedIterator for IndexIter<'_, N, Ix, O>
 where
     N: Node<Ix>,
     Ix: IndexType,
@@ -264,7 +264,7 @@ where
 }
 
 /// An iterator that moves Node references out of a [`TreeView`] in a specific traversal order
-pub struct ViewIter<'a, N, Ix, O = FIFO>
+pub struct ViewIter<'a, N, Ix, O = Fifo>
 where
     N: Node<Ix>,
     Ix: IndexType,
@@ -327,7 +327,7 @@ where
     }
 }
 
-impl<'a, N, Ix, O> std::iter::FusedIterator for ViewIter<'a, N, Ix, O>
+impl<N, Ix, O> std::iter::FusedIterator for ViewIter<'_, N, Ix, O>
 where
     N: Node<Ix>,
     Ix: IndexType,
@@ -336,7 +336,7 @@ where
 }
 
 /// An iterator that moves Node indices out of a [`TreeView`] in a specific traversal order
-pub struct ViewIndexIter<'a, N, Ix, O = FIFO>
+pub struct ViewIndexIter<'a, N, Ix, O = Fifo>
 where
     N: Node<Ix>,
     Ix: IndexType,
@@ -362,7 +362,7 @@ where
     }
 }
 
-impl<'a, N, Ix, O> Iterator for ViewIndexIter<'a, N, Ix, O>
+impl<N, Ix, O> Iterator for ViewIndexIter<'_, N, Ix, O>
 where
     N: Node<Ix>,
     Ix: IndexType,
@@ -401,7 +401,7 @@ where
     }
 }
 
-impl<'a, N, Ix, O> core::iter::FusedIterator for ViewIndexIter<'a, N, Ix, O>
+impl<N, Ix, O> core::iter::FusedIterator for ViewIndexIter<'_, N, Ix, O>
 where
     N: Node<Ix>,
     Ix: IndexType,

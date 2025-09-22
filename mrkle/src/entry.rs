@@ -169,7 +169,7 @@ impl core::fmt::Debug for HexDisplay<'_> {
         write!(
             f,
             "HexDisplay {{ len : {:?}  slice : {:?} }}",
-            self.size, self
+            self.size, self.inner
         )
     }
 }
