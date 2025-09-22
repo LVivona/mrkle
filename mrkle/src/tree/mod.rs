@@ -127,7 +127,7 @@ impl<N: Node<Ix>, Ix: IndexType> Tree<N, Ix> {
     }
 
     /// Returns a mut reference to an element [`Node`] or subslice depending on the type of index.
-    pub fn get_mut<I>(&mut self, idx: I) -> Option<&mut <I as SliceIndex<[N]>>::Output>
+    pub fn get_mut<I>(&mut self, idx: I) -> Option<&mut I::Output>
     where
         I: SliceIndex<[N]>,
     {

@@ -818,20 +818,14 @@ mod test {
         let tree: MrkleTree<String, Sha1> =
             MrkleTree::from_leaves(nodes.iter().map(|&v| String::from(v)).collect());
 
-        println!("tree full: \n{tree}");
-
         let mut proof = tree.generate_proof(NodeIndex::new(0));
 
         let leaf = proof.get_leaf_mut(NodeIndex::new(0)).unwrap();
-        println!("{leaf}");
-        println!("proof: \n{proof}");
 
         let buffer = bincode::serde::encode_to_vec(&proof, bincode::config::standard()).unwrap();
 
         let (expected, _): (MrkleProof<Sha1>, usize) =
             bincode::serde::decode_from_slice(&buffer, bincode::config::standard()).unwrap();
-
-        println!("expected: \n{expected}");
 
         assert_eq!(expected, proof)
     }

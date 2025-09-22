@@ -236,11 +236,10 @@ where
 
         let index = O::pop(&mut self.state.storage)?;
 
-        if let Some(node) = self.tree.get(index.index()) {
-            if !node.is_leaf() {
-                O::extend(&mut self.state.storage, node.children().iter().copied());
-            }
-        }
+        self.tree
+            .get(index.index())
+            .filter(|&node| !node.is_leaf())
+            .inspect(|&node| O::extend(&mut self.state.storage, node.children().iter().copied()));
 
         Some(index)
     }
@@ -255,7 +254,7 @@ where
     }
 }
 
-impl<N, Ix, O> std::iter::FusedIterator for IndexIter<'_, N, Ix, O>
+impl<N, Ix, O> core::iter::FusedIterator for IndexIter<'_, N, Ix, O>
 where
     N: Node<Ix>,
     Ix: IndexType,
@@ -327,7 +326,7 @@ where
     }
 }
 
-impl<N, Ix, O> std::iter::FusedIterator for ViewIter<'_, N, Ix, O>
+impl<N, Ix, O> core::iter::FusedIterator for ViewIter<'_, N, Ix, O>
 where
     N: Node<Ix>,
     Ix: IndexType,
@@ -382,11 +381,10 @@ where
 
         let index = O::pop(&mut self.state.storage)?;
 
-        if let Some(node) = self.inner.get(&index) {
-            if !node.is_leaf() {
-                O::extend(&mut self.state.storage, node.children().iter().copied());
-            }
-        }
+        self.inner
+            .get(&index)
+            .filter(|&node| !node.is_leaf())
+            .inspect(|&node| O::extend(&mut self.state.storage, node.children().iter().copied()));
 
         Some(index)
     }
