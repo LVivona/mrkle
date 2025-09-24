@@ -62,6 +62,7 @@ pub(crate) mod prelude {
     }
 
     pub use core::fmt::{Debug, Display};
+    pub use core::hash::Hash;
     pub use core::marker::{Copy, PhantomData};
     pub use core::slice::SliceIndex;
     pub(crate) use crypto::digest::Digest;
@@ -941,10 +942,8 @@ impl<T, D: Digest, Ix: IndexType> MrkleTree<T, D, Ix> {
 
     /// Generate [`MrkleProof`] from a leaf index within the [`MrkleTree`]
     pub fn generate_proof(&self, index: NodeIndex<Ix>) -> MrkleProof<D, Ix>
-    where
-        D: Debug,
-    {
-        MrkleProof::generate_proof(&self.core, index).unwrap()
+where {
+        MrkleProof::generate_proof(&self, index).unwrap()
     }
 }
 

@@ -16,7 +16,15 @@ pub type DefaultIx = u32;
 ///
 /// **Refrence**: <https://crates.io/crates/petgraph>
 pub unsafe trait IndexType:
-    Copy + Default + core::cmp::Ord + core::cmp::PartialOrd + core::fmt::Debug + 'static + Send + Sync
+    Copy
+    + Default
+    + core::cmp::Ord
+    + core::cmp::PartialOrd
+    + core::fmt::Debug
+    + 'static
+    + Send
+    + Sync
+    + Hash
 {
     /// Construct new `IndexType` from usize.
     fn new(x: usize) -> Self;
