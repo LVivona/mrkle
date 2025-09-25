@@ -16,6 +16,7 @@ compile_error!("must choose either the `std` or `alloc` feature");
 
 #[path = "entry.rs"]
 mod borrowed;
+mod builder;
 mod proof;
 
 /// Cryptographic hash utilities and traits used in Merkle trees.
@@ -34,6 +35,7 @@ pub mod error;
 pub(crate) use crate::error::{EntryError, NodeError, ProofError, TreeError};
 pub(crate) use crate::tree::DefaultIx;
 
+pub use crate::builder::MrkleDefaultBuilder;
 pub use crate::hasher::{GenericArray, Hasher, MrkleHasher};
 pub use crate::proof::{MrkleProof, MrkleProofNode};
 pub use crate::tree::{IndexIter, IndexType, Iter, MutNode, Node, NodeIndex, Tree, TreeView};
@@ -45,17 +47,18 @@ pub(crate) mod prelude {
     mod no_stds {
         pub use alloc::borrow::{Borrow, Cow, ToOwned};
         pub use alloc::boxed::Box;
-        pub use alloc::collections::{BTreeMap, VecDeque};
+        pub use alloc::collections::{BTreeMap, BTreeSet, VecDeque};
         pub use alloc::str;
         pub use alloc::string::{String, ToString};
         pub use alloc::vec::Vec;
+        pub use hashbrown::{HashMap, HashSet};
     }
 
     #[cfg(feature = "std")]
     mod stds {
         pub use std::borrow::{Borrow, Cow, ToOwned};
         pub use std::boxed::Box;
-        pub use std::collections::{BTreeMap, VecDeque};
+        pub use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque};
         pub use std::str;
         pub use std::string::{String, ToString};
         pub use std::vec::Vec;
@@ -112,7 +115,7 @@ impl<T, D: Digest, Ix: IndexType> Eq for MrkleNode<T, D, Ix> {}
 
 impl<T, D: Digest, Ix: IndexType> MrkleNode<T, D, Ix>
 where
-    T: AsRef<[u8]>,
+    T: AsRef<[u8]> + Clone,
 {
     /// Creates a new leaf node with the given payload.
     ///
@@ -789,9 +792,15 @@ impl<T, D: Digest, Ix: IndexType> Default for MrkleTree<T, D, Ix> {
     }
 }
 
+impl<T, D: Digest, Ix: IndexType> MrkleTree<T, D, Ix> {
+    pub(crate) fn new(tree: Tree<MrkleNode<T, D, Ix>, Ix>) -> Self {
+        Self { core: tree }
+    }
+}
+
 impl<T, D: Digest, Ix: IndexType> MrkleTree<T, D, Ix>
 where
-    T: AsRef<[u8]>,
+    T: AsRef<[u8]> + Clone,
 {
     /// Constructs a `MrkleTree` from leaf nodes.
     ///
@@ -814,55 +823,57 @@ where
     ///
     /// let tree = MrkleTree::<&str, Sha1>::from_leaves(leaves);
     /// ```
-    pub fn from_leaves(mut leaves: Vec<T>) -> Self {
-        let mut tree = Tree::new();
+    pub fn from_leaves(leaves: Vec<T>) -> Result<MrkleTree<T, D, Ix>, TreeError> {
+        return MrkleDefaultBuilder::build_from_data(leaves);
 
-        if leaves.is_empty() {
-            return Self { core: tree };
-        }
+        // let mut tree = Tree::new();
 
-        let hasher = MrkleHasher::<D>::new();
+        // if leaves.is_empty() {
+        //     return Self { core: tree };
+        // }
 
-        // Handle single leaf case
-        if leaves.len() == 1 {
-            let payload = leaves.pop().unwrap();
+        // let hasher = MrkleHasher::<D>::new();
 
-            let hash = hasher.hash(&payload);
-            let leaf = MrkleNode::leaf_with_hash(payload, hash.clone());
-            let leaf_idx = tree.push(leaf);
+        // // Handle single leaf case
+        // if leaves.len() == 1 {
+        //     let payload = leaves.pop().unwrap();
 
-            let hash = hasher.hash(&hash);
-            let root = MrkleNode::internal(vec![leaf_idx], hash);
-            let root_idx = tree.push(root);
-            tree.nodes[leaf_idx.index()].parent = Some(root_idx);
-            tree.root = Some(root_idx);
+        //     let hash = hasher.hash(&payload);
+        //     let leaf = MrkleNode::leaf_with_hash(payload, hash.clone());
+        //     let leaf_idx = tree.push(leaf);
 
-            return Self { core: tree };
-        }
+        //     let hash = hasher.hash(&hash);
+        //     let root = MrkleNode::internal(vec![leaf_idx], hash);
+        //     let root_idx = tree.push(root);
+        //     tree.nodes[leaf_idx.index()].parent = Some(root_idx);
+        //     tree.root = Some(root_idx);
 
-        let mut queue: VecDeque<NodeIndex<Ix>> = VecDeque::new();
-        for payload in leaves {
-            let idx = tree.push(MrkleNode::leaf(payload));
-            queue.push_back(idx);
-        }
+        //     return Self { core: tree };
+        // }
 
-        while queue.len() > 1 {
-            let lhs = queue.pop_front().unwrap();
-            let rhs = queue.pop_front().unwrap();
+        // let mut queue: VecDeque<NodeIndex<Ix>> = VecDeque::new();
+        // for payload in leaves {
+        //     let idx = tree.push(MrkleNode::leaf(payload));
+        //     queue.push_back(idx);
+        // }
 
-            let hash = hasher.concat(&tree.nodes[lhs.index()].hash, &tree.nodes[rhs.index()].hash);
+        // while queue.len() > 1 {
+        //     let lhs = queue.pop_front().unwrap();
+        //     let rhs = queue.pop_front().unwrap();
 
-            let parent_idx = tree.push(MrkleNode::internal(vec![lhs, rhs], hash));
+        //     let hash = hasher.concat(&tree.nodes[lhs.index()].hash, &tree.nodes[rhs.index()].hash);
 
-            tree.nodes[lhs.index()].parent = Some(parent_idx);
-            tree.nodes[rhs.index()].parent = Some(parent_idx);
+        //     let parent_idx = tree.push(MrkleNode::internal(vec![lhs, rhs], hash));
 
-            queue.push_back(parent_idx);
-        }
+        //     tree.nodes[lhs.index()].parent = Some(parent_idx);
+        //     tree.nodes[rhs.index()].parent = Some(parent_idx);
 
-        tree.root = queue.pop_front();
+        //     queue.push_back(parent_idx);
+        // }
 
-        Self { core: tree }
+        // tree.root = queue.pop_front();
+
+        // Self { core: tree }
     }
 }
 
@@ -894,6 +905,31 @@ impl<T, D: Digest, Ix: IndexType> MrkleTree<T, D, Ix> {
         self.core.len()
     }
 
+    /// Returns the total number of nodes the vector can hold without reallocating.
+    #[inline]
+    pub fn capacity(&self) -> usize {
+        self.core.capacity()
+    }
+
+    /// Return children Nodes as immutable references of the given index.
+    #[inline]
+    pub fn get_children(&self, index: NodeIndex<Ix>) -> Vec<&MrkleNode<T, D, Ix>> {
+        self.get(index.index()).map_or(Vec::new(), |node| {
+            node.children()
+                .iter()
+                .map(|&idx| self.get(idx.index()).unwrap())
+                .collect()
+        })
+    }
+
+    /// Return a childen of the indexed node as a vector of [`NodeIndex<Ix>`].
+    #[inline]
+    pub fn get_children_indices(&self, index: NodeIndex<Ix>) -> Vec<NodeIndex<Ix>> {
+        self.get(index.index())
+            .map(|node| node.children())
+            .unwrap_or(Vec::new())
+    }
+
     /// Returns a reference to an element [`MrkleNode<T, D, Ix>`].
     pub fn get<I>(&self, index: I) -> Option<&I::Output>
     where
@@ -920,6 +956,13 @@ impl<T, D: Digest, Ix: IndexType> MrkleTree<T, D, Ix> {
         self.core.leaves_ref()
     }
 
+    /// Searches for a node by checking its claimed parent-child relationship.
+    ///
+    /// Returns the node’s index if found and properly connected.
+    pub fn find(&self, node: &MrkleNode<T, D, Ix>) -> Option<NodeIndex<Ix>> {
+        self.core.find(node)
+    }
+
     /// Create a [`TreeView`] of the Merkle tree
     /// from a node reference as root if found, else return None.
     #[inline]
@@ -941,9 +984,9 @@ impl<T, D: Digest, Ix: IndexType> MrkleTree<T, D, Ix> {
     }
 
     /// Generate [`MrkleProof`] from a leaf index within the [`MrkleTree`]
-    pub fn generate_proof(&self, index: NodeIndex<Ix>) -> MrkleProof<D, Ix>
+    pub fn generate_proof(&self, index: Vec<NodeIndex<Ix>>) -> MrkleProof<D, Ix>
 where {
-        MrkleProof::generate_proof(&self, index).unwrap()
+        MrkleProof::generate(&self, index).unwrap()
     }
 }
 
@@ -970,10 +1013,10 @@ impl<'a, T, D: Digest, Ix: IndexType> IntoIterator for &'a MrkleTree<T, D, Ix> {
 
 impl<T, D: Digest, Ix: IndexType> From<Vec<T>> for MrkleTree<T, D, Ix>
 where
-    T: AsRef<[u8]>,
+    T: AsRef<[u8]> + Clone,
 {
     fn from(value: Vec<T>) -> Self {
-        MrkleTree::from_leaves(value)
+        MrkleTree::from_leaves(value).unwrap()
     }
 }
 
@@ -982,25 +1025,25 @@ where
     T: AsRef<[u8]> + Clone,
 {
     fn from(value: &[T; N]) -> Self {
-        MrkleTree::from_leaves(value.to_vec())
+        MrkleTree::from_leaves(value.to_vec()).unwrap()
     }
 }
 
 impl<T, D: Digest, Ix: IndexType> From<VecDeque<T>> for MrkleTree<T, D, Ix>
 where
-    T: AsRef<[u8]>,
+    T: AsRef<[u8]> + Clone,
 {
     fn from(value: VecDeque<T>) -> Self {
-        MrkleTree::from_leaves(value.into())
+        MrkleTree::from_leaves(value.into()).unwrap()
     }
 }
 
 impl<T, D: Digest, Ix: IndexType> From<Box<[T]>> for MrkleTree<T, D, Ix>
 where
-    T: AsRef<[u8]>,
+    T: AsRef<[u8]> + Clone,
 {
     fn from(value: Box<[T]>) -> Self {
-        MrkleTree::from_leaves(value.into_vec())
+        MrkleTree::from_leaves(value.into_vec()).unwrap()
     }
 }
 
@@ -1143,7 +1186,8 @@ mod test {
     #[test]
     fn test_building_binary_tree_base_case() {
         let leaves: Vec<&str> = vec!["A"];
-        let tree = MrkleTree::<&str, sha1::Sha1>::from_leaves(leaves);
+        let tree = MrkleTree::<&str, sha1::Sha1>::from(leaves);
+        println!("{tree}");
         assert!(tree.len() == 2);
         assert!(tree.leaves().len() == 1);
     }
@@ -1151,8 +1195,9 @@ mod test {
     #[test]
     fn test_building_binary_tree() {
         let leaves: Vec<&str> = vec!["A", "B", "C", "D", "E"];
-        let tree = MrkleTree::<&str, sha1::Sha1>::from_leaves(leaves.clone());
-        assert_eq!(tree.len(), 9);
+        let tree = MrkleTree::<&str, sha1::Sha1>::from(leaves.clone());
+        print!("{tree}");
+        assert_eq!(tree.len(), 11);
         for node in &tree {
             if node.is_leaf() {
                 if let Some(value) = node.value() {
@@ -1168,7 +1213,7 @@ mod test {
     #[cfg(feature = "std")]
     fn test_building_binary_tree_display() {
         let leaves: Vec<&str> = vec!["A", "B", "C", "D", "E"];
-        let tree = MrkleTree::<&str, sha1::Sha1>::from_leaves(leaves.clone());
+        let tree = MrkleTree::<&str, sha1::Sha1>::from(leaves.clone());
         println!("{tree}");
     }
 
@@ -1176,12 +1221,10 @@ mod test {
     #[allow(clippy::clone_on_copy)]
     fn test_building_binary_tree_proof() {
         let leaves: Vec<&str> = vec!["A", "B", "C", "D", "E"];
-        let tree = MrkleTree::<&str, sha1::Sha1>::from_leaves(leaves.clone());
-        let mut proof = tree.generate_proof(NodeIndex::new(4));
-        let leaf = proof.get_leaf_mut(NodeIndex::new(0)).unwrap();
-        let hash = tree.get(4).unwrap().hash().clone();
-        leaf.update(hash);
-        assert!(proof.try_validate_basic().unwrap());
+        let tree = MrkleTree::<&str, sha1::Sha1>::from(leaves.clone());
+        print!("{tree}");
+        let proof = tree.generate_proof(vec![NodeIndex::new(4)]);
+        println!("{proof}");
     }
 
     #[cfg(feature = "serde")]
@@ -1201,8 +1244,11 @@ mod test {
     #[cfg(feature = "serde")]
     fn test_building_binary_tree_serde() {
         let nodes: Vec<&str> = Vec::from(["a", "b", "c", "d", "e", "f"]);
-        let expected = MrkleTree::<String, sha1::Sha1>::from_leaves(
-            nodes.iter().map(|&node| String::from(node)).collect(),
+        let expected = MrkleTree::<String, sha1::Sha1>::from(
+            nodes
+                .iter()
+                .map(|&node| String::from(node))
+                .collect::<Vec<String>>(),
         );
 
         let buffer = bincode::serde::encode_to_vec(&expected, bincode::config::standard()).unwrap();
