@@ -27,18 +27,6 @@ pub enum TreeError {
     #[error("Tree is missing a root node.")]
     MissingRoot,
 
-    /// The designated root node was found to have a parent.
-    ///
-    /// In a valid tree, the root must never have a parent.
-    #[error("Root node {0} cannot have a parent.")]
-    InvalidRoot(usize),
-
-    /// A cycle was detected in the tree structure.
-    ///
-    /// Trees must be acyclic.
-    #[error("Tree structure contains a cycle.")]
-    CycleDetected,
-
     /// A node exists in the tree without a parent.
     ///
     /// All non-root nodes must have exactly one parent.
@@ -58,27 +46,62 @@ pub enum TreeError {
     ///
     /// Each non-root node must have a single unique parent.
     #[error(
-        "Cannot add child {child} to {expected:?}: \
-         {parent:?} is already its parent."
+        "Cannot add child {child} to {parent}: \
+         node already has a parent."
     )]
     ParentConflict {
-        /// The node that was expected to be the parent.
-        expected: usize,
         /// The node that is already the parent.
         parent: usize,
         /// The child node in conflict.
         child: usize,
     },
 
-    /// Attemped to search for node with refrecne.
-    ///
-    /// Could not find node from reference.
-    #[error("Could not find node from reference.")]
-    InvalidNodeReference,
-
     /// An error occurred while operating on a [`Node`](crate::tree::Node).
     #[error("{0}")]
     NodeError(#[from] NodeError),
+
+    // ========== NEW BUILDER-RELATED ERRORS ==========
+    /// The builder has already been finalized and cannot be modified.
+    ///
+    /// Once a builder is finalized with [`finish()`], no further modifications
+    /// are allowed to maintain tree integrity.
+    #[error("Builder has already been finalized and cannot be modified.")]
+    AlreadyFinalized,
+
+    /// An invalid operation was attempted on the tree or builder.
+    ///
+    /// This error provides context about what operation failed and why.
+    #[error("Invalid operation '{operation}': {reason}")]
+    InvalidOperation {
+        /// The name of the operation that failed.
+        operation: &'static str,
+        /// A human-readable description of why the operation failed.
+        reason: String,
+    },
+
+    /// The tree is in an inconsistent state.
+    ///
+    /// This error indicates that the tree's internal state has become
+    /// inconsistent, possibly due to concurrent modification or corruption.
+    #[error("Tree is in an inconsistent state: {details}")]
+    InconsistentState {
+        /// Details about the inconsistency.
+        details: String,
+    },
+
+    /// A validation error occurred during tree construction or verification.
+    ///
+    /// This error aggregates multiple validation failures that occurred
+    /// during tree validation operations.
+    #[error("Validation failed with {count} error(s): {summary}")]
+    ValidationFailed {
+        /// The number of validation errors.
+        count: usize,
+        /// A summary of the validation failures.
+        summary: String,
+        /// The individual validation errors.
+        errors: Vec<TreeError>,
+    },
 }
 
 /// Errors that may occur when constructing [`MrkleTree`](crate::MrkleTree) & [`MrkleProof`](crate::proof::MrkleProof).
