@@ -271,6 +271,12 @@ where
     }
 }
 
+impl<Ix: IndexType> From<NodeIndex<Ix>> for usize {
+    fn from(value: NodeIndex<Ix>) -> usize {
+        value.index()
+    }
+}
+
 /// Trait for mutable operations on Node data types.
 ///
 /// This trait provides methods for modifying node structure, complementing
@@ -493,6 +499,12 @@ impl<T, Ix: IndexType> MutNode<Ix> for BasicNode<T, Ix> {
 
     fn clear(&mut self) -> Vec<NodeIndex<Ix>> {
         self.children.drain(..).collect()
+    }
+}
+
+impl<T: Display + Debug, Ix: IndexType> Display for BasicNode<T, Ix> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "{:?}", self.value)
     }
 }
 

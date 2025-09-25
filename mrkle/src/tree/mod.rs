@@ -3,6 +3,7 @@ mod borrow;
 mod iter;
 mod node;
 
+use crate::NodeError;
 use crate::TreeError;
 use crate::prelude::*;
 
@@ -62,6 +63,12 @@ impl<N: Node<Ix>, Ix: IndexType> Tree<N, Ix> {
         self.nodes.len()
     }
 
+    /// Returns the total number of nodes the vector can hold without reallocating.
+    #[inline]
+    pub fn capacity(&self) -> usize {
+        self.nodes.capacity()
+    }
+
     /// Returns a reference to the root node.
     ///
     /// # Panics
@@ -118,6 +125,23 @@ impl<N: Node<Ix>, Ix: IndexType> Tree<N, Ix> {
         }
     }
 
+    /// Return children Nodes as immutable references of the given index.
+    pub fn get_children(&self, index: NodeIndex<Ix>) -> Vec<&N> {
+        self.get(index.index()).map_or(Vec::new(), |node| {
+            node.children()
+                .iter()
+                .map(|&idx| self.get(idx.index()).unwrap())
+                .collect()
+        })
+    }
+
+    /// Return a childen of the indexed node as a vector of [`NodeIndex<Ix>`].
+    pub fn get_children_indices(&self, index: NodeIndex<Ix>) -> Vec<NodeIndex<Ix>> {
+        self.get(index.index())
+            .map(|node| node.children())
+            .unwrap_or(Vec::new())
+    }
+
     /// Returns a reference to an element [`Node`] or subslice depending on the type of index.
     pub fn get<I>(&self, idx: I) -> Option<&I::Output>
     where
@@ -129,6 +153,7 @@ impl<N: Node<Ix>, Ix: IndexType> Tree<N, Ix> {
     /// Returns a mut reference to an element [`Node`] or subslice depending on the type of index.
     pub fn get_mut<I>(&mut self, idx: I) -> Option<&mut I::Output>
     where
+        N: MutNode<Ix>,
         I: SliceIndex<[N]>,
     {
         self.nodes.get_mut(idx)
@@ -140,6 +165,212 @@ impl<N: Node<Ix>, Ix: IndexType> Tree<N, Ix> {
     pub fn push(&mut self, node: N) -> NodeIndex<Ix> {
         self.nodes.push(node);
         NodeIndex::new(self.nodes.len() - 1)
+    }
+
+    /// Prune [`Node<Ix>`] from tree.
+    pub fn prune(&mut self, index: NodeIndex<Ix>) -> Result<(), TreeError>
+    where
+        N: MutNode<Ix>,
+    {
+        let mut remove = BTreeSet::new();
+        let mut queue = VecDeque::from([index]);
+
+        // Get nodes to prune from the tree.
+        while let Some(idx) = queue.pop_front() {
+            if let Some(node) = self.get(idx.index()) {
+                remove.insert(idx);
+                queue.extend(node.children());
+            } else {
+                return Err(TreeError::IndexOutOfBounds {
+                    index: idx.into(),
+                    len: self.len(),
+                });
+            }
+        }
+
+        // Convert to sorted indices for analysis
+        let mut indices_to_remove: Vec<usize> = remove.iter().map(|idx| idx.index()).collect();
+        indices_to_remove.sort();
+
+        // Check if indices are sequential
+        if self.is_sequential(&indices_to_remove) {
+            self.prune_sequential(indices_to_remove)
+        } else {
+            self.prune_non_sequential(remove)
+        }
+    }
+
+    /// Check if a sorted vector of indices is sequential
+    fn is_sequential(&self, indices: &[usize]) -> bool {
+        if indices.is_empty() {
+            return true;
+        }
+
+        for window in indices.windows(2) {
+            if window[1] != window[0] + 1 {
+                return false;
+            }
+        }
+        true
+    }
+
+    /// Optimized removal for sequential indices
+    fn prune_sequential(&mut self, indices_to_remove: Vec<usize>) -> Result<(), TreeError>
+    where
+        N: MutNode<Ix>,
+    {
+        if indices_to_remove.is_empty() {
+            return Ok(());
+        }
+
+        let start_idx = indices_to_remove[0];
+        let end_idx = indices_to_remove[indices_to_remove.len() - 1];
+        let remove_count = indices_to_remove.len();
+
+        // Update references in nodes that will remain
+        for (current_idx, node) in self.nodes.iter_mut().enumerate() {
+            // Skip nodes that will be removed
+            if current_idx >= start_idx && current_idx <= end_idx {
+                continue;
+            }
+
+            // Update children references
+            let updated_children: Vec<NodeIndex<Ix>> = node
+                .children()
+                .iter()
+                .filter_map(|&child_idx| {
+                    let child_usize = child_idx.index();
+
+                    if child_usize >= start_idx && child_usize <= end_idx {
+                        // Child will be removed
+                        None
+                    } else if child_usize > end_idx {
+                        // Child index needs to be shifted down
+                        Some(NodeIndex::new(child_usize - remove_count))
+                    } else {
+                        // Child index stays the same (before removed range)
+                        Some(child_idx)
+                    }
+                })
+                .collect();
+            node.clear();
+            for child in updated_children {
+                if node.contains(&child) {
+                    return Err(NodeError::Duplicate {
+                        child: child.index(),
+                    }
+                    .into());
+                } else {
+                    node.push(child);
+                }
+            }
+
+            // Update parent reference if node has one
+            if let Some(parent_idx) = node.parent() {
+                let parent_usize = parent_idx.index();
+
+                if parent_usize >= start_idx && parent_usize <= end_idx {
+                    // Parent will be removed
+                    node.take_parent();
+                } else if parent_usize > end_idx {
+                    // Parent index needs to be shifted down
+                    node.set_parent(NodeIndex::new(parent_usize - remove_count));
+                }
+                // If parent_usize < start_idx, no change needed
+            }
+        }
+
+        // Update root if necessary
+        if let Some(root_idx) = self.root {
+            let root_usize = root_idx.index();
+
+            if root_usize >= start_idx && root_usize <= end_idx {
+                // Root will be removed
+                self.root = None;
+            } else if root_usize > end_idx {
+                // Root index needs to be shifted down
+                self.root = Some(NodeIndex::new(root_usize - remove_count));
+            }
+            // If root_usize < start_idx, no change needed
+        }
+
+        // Remove the sequential range in one operation
+        self.nodes.drain(start_idx..=end_idx);
+
+        Ok(())
+    }
+
+    /// General removal for non-sequential indices
+    fn prune_non_sequential(&mut self, remove: BTreeSet<NodeIndex<Ix>>) -> Result<(), TreeError>
+    where
+        N: MutNode<Ix>,
+    {
+        // Build index mapping before any modifications
+        let mut index_mapping = BTreeMap::new();
+        let mut new_index = 0;
+
+        for old_index in 0..self.nodes.len() {
+            if !remove.contains(&NodeIndex::new(old_index)) {
+                index_mapping.insert(old_index, new_index);
+                new_index += 1;
+            }
+        }
+
+        // Update all references in remaining nodes
+        for (old_idx, node) in self.nodes.iter_mut().enumerate() {
+            if !remove.contains(&NodeIndex::new(old_idx)) {
+                // Update children
+                let updated_children: Vec<NodeIndex<Ix>> = node
+                    .children()
+                    .iter()
+                    .filter_map(|&child_idx| {
+                        index_mapping
+                            .get(&child_idx.index())
+                            .map(|&new_idx| NodeIndex::new(new_idx))
+                    })
+                    .collect();
+
+                node.clear();
+                for child in updated_children {
+                    if node.contains(&child) {
+                        return Err(NodeError::Duplicate {
+                            child: child.index(),
+                        }
+                        .into());
+                    } else {
+                        node.push(child);
+                    }
+                }
+
+                // Update parent if exists
+                if let Some(parent_idx) = node.parent() {
+                    if let Some(&new_parent_idx) = index_mapping.get(&parent_idx.index()) {
+                        node.set_parent(NodeIndex::new(new_parent_idx));
+                    } else {
+                        node.take_parent(); // Parent was removed
+                    }
+                }
+            }
+        }
+
+        // Update root
+        if let Some(root_idx) = self.root {
+            if let Some(&new_root_idx) = index_mapping.get(&root_idx.index()) {
+                self.root = Some(NodeIndex::new(new_root_idx));
+            } else {
+                self.root = None; // Root was removed
+            }
+        }
+
+        // Remove nodes using retain (efficient for scattered indices)
+        let mut current_index = 0;
+        self.nodes.retain(|_| {
+            let should_keep = !remove.contains(&NodeIndex::new(current_index));
+            current_index += 1;
+            should_keep
+        });
+
+        Ok(())
     }
 
     /// Return a vector of  [`NodeIndex<Ix>`], location were the leaves can be index.
@@ -394,7 +625,7 @@ where
 mod test {
 
     use super::node::BasicNode as Node;
-    use crate::prelude::*;
+    use crate::{MutNode, prelude::*};
     use crate::{NodeIndex, Tree};
 
     #[test]
@@ -482,5 +713,84 @@ mod test {
             assert!(s.len() == 1);
             assert!(s.root() == &tree.nodes[0]);
         }
+    }
+
+    #[test]
+    fn test_tree_prune_node_root() {
+        let mut root: Node<String> = Node::new("hello".to_string());
+        root.children = vec![NodeIndex::new(0), NodeIndex::new(1)];
+        let mut tree: Tree<Node<String>> = Tree::new();
+        let n1 = Node::new("world".to_string());
+        let n2 = Node::new("!".to_string());
+        tree.root = Some(NodeIndex::new(2));
+        tree.nodes.push(n1.clone());
+        tree.nodes.push(n2);
+        tree.nodes.push(root);
+
+        tree.prune(NodeIndex::new(2)).unwrap();
+        assert!(tree.is_empty());
+    }
+
+    #[test]
+    fn test_tree_prune_node_leaf_non_seq() {
+        let mut root: Node<String> = Node::new("hello".to_string());
+        root.children = vec![NodeIndex::new(0), NodeIndex::new(1)];
+        let mut tree: Tree<Node<String>> = Tree::new();
+        let n1 = Node::new("world".to_string());
+        let mut n2 = Node::new("!".to_string());
+        let mut n3: Node<String> = Node::new("!!".to_string());
+
+        n2.push(NodeIndex::new(3));
+
+        tree.root = Some(NodeIndex::new(2));
+        tree.push(n1);
+        let index = tree.push(n2);
+        n3.set_parent(index);
+        tree.push(root);
+        tree.push(n3);
+
+        tree.prune(index).unwrap();
+        let expect = vec!["hello", "world"];
+        assert!(
+            tree.iter()
+                .map(|node| expect.contains(&node.value.as_str()))
+                .all(|f| f)
+        )
+    }
+
+    #[test]
+    fn test_tree_prune_node_leaf_seq() {
+        let mut tree: Tree<Node<String>> = Tree::new();
+
+        let mut root: Node<String> = Node::new("hello".to_string());
+        root.children = vec![NodeIndex::new(1), NodeIndex::new(2)];
+
+        // construct children
+        let n1 = Node::new("world".to_string());
+        let mut n2 = Node::new("!".to_string());
+        let mut n3: Node<String> = Node::new("!!".to_string());
+
+        // push child node into node 2.
+        n2.push(NodeIndex::new(3));
+
+        // set root.
+        tree.root = Some(NodeIndex::new(0));
+
+        // push nodes onto tree.
+        tree.push(root);
+        tree.push(n1);
+        let index = tree.push(n2);
+        n3.set_parent(index);
+        tree.push(n3);
+
+        // remove !, and !!
+        tree.prune(index).unwrap();
+
+        let expect = vec!["hello", "world"];
+        assert!(
+            tree.iter()
+                .map(|node| expect.contains(&node.value.as_str()))
+                .all(|f| f)
+        )
     }
 }
