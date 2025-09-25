@@ -45,7 +45,7 @@ let chunk_size = 16;
 let chunks: Vec<&[u8]> = data.chunks(chunk_size).collect();
 
 // Build the Merkle tree from chunks
-let tree = MrkleTree::<&[u8], Sha256>::from_leaves(chunks);
+let tree = MrkleTree::<&[u8], Sha256>::from(chunks);
 
 // Get the Merkle root
 let root = tree.root();
