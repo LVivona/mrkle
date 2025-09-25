@@ -95,6 +95,7 @@ impl<N: Node<Ix>, Ix: IndexType> Tree<N, Ix> {
     /// # Returns
     /// - `Ok(&N)` if a root exists.
     /// - `Err(TreeError::MissingRoot)` if the tree has no root.
+    #[inline]
     pub fn try_root(&self) -> Result<&N, TreeError> {
         if let Some(idx) = self.root {
             Ok(&self.nodes[idx.index()])
@@ -111,6 +112,7 @@ impl<N: Node<Ix>, Ix: IndexType> Tree<N, Ix> {
     /// # Returns
     /// - `Ok(&N)` if a root exists.
     /// - `Err(TreeError::MissingRoot)` if the tree has no root.
+    #[inline]
     pub fn try_root_mut(&mut self) -> Result<&mut N, TreeError>
     where
         N: MutNode<Ix>,
@@ -126,6 +128,7 @@ impl<N: Node<Ix>, Ix: IndexType> Tree<N, Ix> {
     }
 
     /// Return children Nodes as immutable references of the given index.
+    #[inline]
     pub fn get_children(&self, index: NodeIndex<Ix>) -> Vec<&N> {
         self.get(index.index()).map_or(Vec::new(), |node| {
             node.children()
@@ -136,6 +139,7 @@ impl<N: Node<Ix>, Ix: IndexType> Tree<N, Ix> {
     }
 
     /// Return a childen of the indexed node as a vector of [`NodeIndex<Ix>`].
+    #[inline]
     pub fn get_children_indices(&self, index: NodeIndex<Ix>) -> Vec<NodeIndex<Ix>> {
         self.get(index.index())
             .map(|node| node.children())
@@ -143,6 +147,7 @@ impl<N: Node<Ix>, Ix: IndexType> Tree<N, Ix> {
     }
 
     /// Returns a reference to an element [`Node`] or subslice depending on the type of index.
+    #[inline]
     pub fn get<I>(&self, idx: I) -> Option<&I::Output>
     where
         I: SliceIndex<[N]>,
@@ -151,6 +156,7 @@ impl<N: Node<Ix>, Ix: IndexType> Tree<N, Ix> {
     }
 
     /// Returns a mut reference to an element [`Node`] or subslice depending on the type of index.
+    #[inline]
     pub fn get_mut<I>(&mut self, idx: I) -> Option<&mut I::Output>
     where
         N: MutNode<Ix>,
@@ -253,7 +259,11 @@ impl<N: Node<Ix>, Ix: IndexType> Tree<N, Ix> {
                     }
                 })
                 .collect();
+
+            // Clear out nodes from mutable node reference.
             node.clear();
+
+            // Push new index into nodes.
             for child in updated_children {
                 if node.contains(&child) {
                     return Err(NodeError::Duplicate {
@@ -267,31 +277,29 @@ impl<N: Node<Ix>, Ix: IndexType> Tree<N, Ix> {
 
             // Update parent reference if node has one
             if let Some(parent_idx) = node.parent() {
-                let parent_usize = parent_idx.index();
+                let index = parent_idx.index();
 
-                if parent_usize >= start_idx && parent_usize <= end_idx {
+                if index >= start_idx && index <= end_idx {
                     // Parent will be removed
                     node.take_parent();
-                } else if parent_usize > end_idx {
+                } else if index > end_idx {
                     // Parent index needs to be shifted down
-                    node.set_parent(NodeIndex::new(parent_usize - remove_count));
+                    node.set_parent(NodeIndex::new(index - remove_count));
                 }
-                // If parent_usize < start_idx, no change needed
             }
         }
 
         // Update root if necessary
         if let Some(root_idx) = self.root {
-            let root_usize = root_idx.index();
+            let index = root_idx.index();
 
-            if root_usize >= start_idx && root_usize <= end_idx {
+            if index >= start_idx && index <= end_idx {
                 // Root will be removed
                 self.root = None;
-            } else if root_usize > end_idx {
+            } else if index > end_idx {
                 // Root index needs to be shifted down
-                self.root = Some(NodeIndex::new(root_usize - remove_count));
+                self.root = Some(NodeIndex::new(index - remove_count));
             }
-            // If root_usize < start_idx, no change needed
         }
 
         // Remove the sequential range in one operation
@@ -306,12 +314,12 @@ impl<N: Node<Ix>, Ix: IndexType> Tree<N, Ix> {
         N: MutNode<Ix>,
     {
         // Build index mapping before any modifications
-        let mut index_mapping = BTreeMap::new();
+        let mut index_mapping = HashMap::new();
         let mut new_index = 0;
 
-        for old_index in 0..self.nodes.len() {
-            if !remove.contains(&NodeIndex::new(old_index)) {
-                index_mapping.insert(old_index, new_index);
+        for index in 0..self.nodes.len() {
+            if !remove.contains(&NodeIndex::new(index)) {
+                index_mapping.insert(index, new_index);
                 new_index += 1;
             }
         }
@@ -354,15 +362,14 @@ impl<N: Node<Ix>, Ix: IndexType> Tree<N, Ix> {
         }
 
         // Update root
-        if let Some(root_idx) = self.root {
-            if let Some(&new_root_idx) = index_mapping.get(&root_idx.index()) {
-                self.root = Some(NodeIndex::new(new_root_idx));
+        if let Some(index) = self.root {
+            if let Some(&new_index) = index_mapping.get(&index.index()) {
+                self.root = Some(NodeIndex::new(new_index));
             } else {
-                self.root = None; // Root was removed
+                self.root = None;
             }
         }
 
-        // Remove nodes using retain (efficient for scattered indices)
         let mut current_index = 0;
         self.nodes.retain(|_| {
             let should_keep = !remove.contains(&NodeIndex::new(current_index));
@@ -399,6 +406,60 @@ impl<N: Node<Ix>, Ix: IndexType> Tree<N, Ix> {
     ///Return root [`TreeView`] of the [`Tree`]
     pub fn view(&self) -> TreeView<'_, N, Ix> {
         TreeView::from(self)
+    }
+
+    /// Searches for a node by checking its claimed parent-child relationship.
+    /// Returns the node's index if found and properly connected.
+    #[inline]
+    pub fn find(&self, node: &N) -> Option<NodeIndex<Ix>>
+    where
+        N: PartialEq,
+    {
+        if let Some(parent_idx) = node.parent() {
+            // Node claims to have a parent, check if parent lists it as a child
+            let parent = self.get(parent_idx.index())?;
+            parent
+                .children()
+                .iter()
+                .find(|&&child_idx| {
+                    self.get(child_idx.index())
+                        .map_or(false, |child| child == node)
+                })
+                .copied()
+        } else {
+            // Node claims to be a possilbe root, check if it matches the tree root
+            self.root
+                .and_then(|root_idx| self.get(root_idx.index()))
+                .filter(|&root_node| root_node == node)
+                .and_then(|_| self.root)
+        }
+    }
+
+    /// Finds the first node that satisfies the given predicate.
+    #[inline]
+    pub fn find_by<F>(&self, predicate: F) -> Option<NodeIndex<Ix>>
+    where
+        F: Fn(&N) -> bool,
+    {
+        self.nodes
+            .iter()
+            .enumerate()
+            .find(|(_, node)| predicate(node))
+            .map(|(idx, _)| NodeIndex::new(idx))
+    }
+
+    /// Finds all nodes that satisfy the given predicate.
+    #[inline]
+    pub fn find_all<F>(&self, predicate: F) -> Vec<NodeIndex<Ix>>
+    where
+        F: Fn(&N) -> bool,
+    {
+        self.nodes
+            .iter()
+            .enumerate()
+            .filter(|(_, node)| predicate(node))
+            .map(|(idx, _)| NodeIndex::new(idx))
+            .collect()
     }
 
     /// Returns `true` if the tree contains no nodes.
