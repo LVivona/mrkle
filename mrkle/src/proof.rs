@@ -912,6 +912,7 @@ where
 #[cfg(test)]
 mod test {
 
+    #[allow(unused_imports)]
     use crate::{MrkleProof, MrkleTree, NodeIndex, prelude::*};
 
     fn build_tree<D: Digest>() -> MrkleTree<String, D> {
