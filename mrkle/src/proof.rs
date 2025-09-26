@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 #![allow(clippy::needless_return)]
-
+#[allow(clippy::collapsible_if)]
 use crate::prelude::*;
 
 use crate::{
@@ -912,8 +912,7 @@ where
 #[cfg(test)]
 mod test {
 
-    use crate::{MrkleTree, NodeIndex, prelude::*};
-    use sha1::Sha1;
+    use crate::{MrkleProof, MrkleTree, NodeIndex, prelude::*};
 
     fn build_tree<D: Digest>() -> MrkleTree<String, D> {
         let nodes: Vec<&str> = Vec::from(["a", "b", "c", "d", "e"]);
@@ -931,9 +930,7 @@ mod test {
     #[test]
     #[cfg(feature = "serde")]
     fn test_serde_mrkle_proof() {
-        use crate::MrkleProof;
-
-        let tree = build_tree::<Sha1>();
+        let tree = build_tree::<sha1::Sha1>();
 
         let mut proof = tree.generate_proof(vec![NodeIndex::new(4)]);
 
@@ -943,7 +940,7 @@ mod test {
 
         let buffer = bincode::serde::encode_to_vec(&proof, bincode::config::standard()).unwrap();
 
-        let (expected, _): (MrkleProof<Sha1>, usize) =
+        let (expected, _): (MrkleProof<sha1::Sha1>, usize) =
             bincode::serde::decode_from_slice(&buffer, bincode::config::standard()).unwrap();
 
         assert_eq!(expected, proof);
