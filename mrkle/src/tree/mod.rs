@@ -143,7 +143,7 @@ impl<N: Node<Ix>, Ix: IndexType> Tree<N, Ix> {
     pub fn get_children_indices(&self, index: NodeIndex<Ix>) -> Vec<NodeIndex<Ix>> {
         self.get(index.index())
             .map(|node| node.children())
-            .unwrap_or(Vec::new())
+            .unwrap_or_default()
     }
 
     /// Returns a reference to an element [`Node`] or subslice depending on the type of index.
@@ -421,17 +421,14 @@ impl<N: Node<Ix>, Ix: IndexType> Tree<N, Ix> {
             parent
                 .children()
                 .iter()
-                .find(|&&child_idx| {
-                    self.get(child_idx.index())
-                        .map_or(false, |child| child == node)
-                })
+                .find(|&&child_idx| self.get(child_idx.index()) == Some(node))
                 .copied()
         } else {
             // Node claims to be a possilbe root, check if it matches the tree root
             self.root
                 .and_then(|root_idx| self.get(root_idx.index()))
                 .filter(|&root_node| root_node == node)
-                .and_then(|_| self.root)
+                .and(self.root)
         }
     }
 
@@ -811,11 +808,10 @@ mod test {
         tree.push(n3);
 
         tree.prune(index).unwrap();
-        let expect = vec!["hello", "world"];
+        let expect = ["hello", "world"];
         assert!(
             tree.iter()
-                .map(|node| expect.contains(&node.value.as_str()))
-                .all(|f| f)
+                .all(|node| expect.contains(&node.value.as_str()))
         )
     }
 
@@ -847,11 +843,10 @@ mod test {
         // remove !, and !!
         tree.prune(index).unwrap();
 
-        let expect = vec!["hello", "world"];
+        let expect = ["hello", "world"];
         assert!(
             tree.iter()
-                .map(|node| expect.contains(&node.value.as_str()))
-                .all(|f| f)
+                .all(|node| expect.contains(&node.value.as_str()))
         )
     }
 }

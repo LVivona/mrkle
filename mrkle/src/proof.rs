@@ -330,11 +330,7 @@ where
                     .next_element()?
                     .ok_or_else(|| serde::de::Error::invalid_length(2, &self))?;
 
-                let hash = if let Some(buf) = hash_bytes {
-                    Some(GenericArray::<D>::clone_from_slice(&buf))
-                } else {
-                    None
-                };
+                let hash = hash_bytes.map(|bytes| GenericArray::<D>::clone_from_slice(&bytes));
 
                 Ok(MrkleProofNode::new(parent, children, hash))
             }
@@ -377,10 +373,7 @@ where
                     hash_bytes.ok_or_else(|| serde::de::Error::missing_field("hash"))?;
 
                 // Convert hash bytes to GenericArray if present
-                let hash = match hash_bytes {
-                    Some(bytes) => Some(GenericArray::<D>::clone_from_slice(&bytes)),
-                    None => None,
-                };
+                let hash = hash_bytes.map(|bytes| GenericArray::<D>::clone_from_slice(&bytes));
 
                 Ok(MrkleProofNode {
                     parent,
@@ -466,8 +459,8 @@ impl<D: Digest, Ix: IndexType> MrkleProof<D, Ix> {
                 .get(index.index())
                 .ok_or(ProofError::out_of_bounds(length, index))?;
             current = node.parent;
-            if current.is_some() {
-                path.push(current.unwrap());
+            if let Some(parent) = current {
+                path.push(parent);
             }
         }
         Ok(path)
@@ -664,7 +657,7 @@ impl<D: Digest, Ix: IndexType> MrkleProof<D, Ix> {
         tree: &MrkleTree<T, D, Ix>,
         leaves: Vec<NodeIndex<Ix>>,
     ) -> Result<MrkleProof<D, Ix>, ProofError> {
-        assert!(leaves.len() >= 1, "Leaves where not provided.");
+        assert!(!leaves.is_empty(), "Leaves where not provided.");
 
         if leaves.len() == 1 {
             Self::generate_proof_from_leaf(tree, leaves[0])

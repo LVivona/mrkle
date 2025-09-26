@@ -86,7 +86,7 @@ use crate::{
 ///     .build_and_finish()?;
 /// # Ok(())
 /// # }
-
+///
 pub struct MrkleDefaultBuilder<T, D: Digest, Ix: IndexType = DefaultIx> {
     /// The underlying tree structure containing all nodes.
     tree: Tree<MrkleNode<T, D, Ix>, Ix>,
@@ -696,7 +696,7 @@ where
 
         // Base case: if there is only one node, create a root for single node.
         if leaves.len() == 1 {
-            return Ok(self.insert_internal(leaves)?);
+            return self.insert_internal(leaves);
         }
 
         // Build tree bottom-up by repeatedly pairing nodes

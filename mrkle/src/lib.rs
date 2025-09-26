@@ -824,7 +824,7 @@ where
     /// let tree = MrkleTree::<&str, Sha1>::from_leaves(leaves);
     /// ```
     pub fn from_leaves(leaves: Vec<T>) -> Result<MrkleTree<T, D, Ix>, TreeError> {
-        return MrkleDefaultBuilder::build_from_data(leaves);
+        MrkleDefaultBuilder::build_from_data(leaves)
 
         // let mut tree = Tree::new();
 
@@ -927,7 +927,7 @@ impl<T, D: Digest, Ix: IndexType> MrkleTree<T, D, Ix> {
     pub fn get_children_indices(&self, index: NodeIndex<Ix>) -> Vec<NodeIndex<Ix>> {
         self.get(index.index())
             .map(|node| node.children())
-            .unwrap_or(Vec::new())
+            .unwrap_or_default()
     }
 
     /// Returns a reference to an element [`MrkleNode<T, D, Ix>`].
@@ -986,7 +986,7 @@ impl<T, D: Digest, Ix: IndexType> MrkleTree<T, D, Ix> {
     /// Generate [`MrkleProof`] from a leaf index within the [`MrkleTree`]
     pub fn generate_proof(&self, index: Vec<NodeIndex<Ix>>) -> MrkleProof<D, Ix>
 where {
-        MrkleProof::generate(&self, index).unwrap()
+        MrkleProof::generate(self, index).unwrap()
     }
 }
 
