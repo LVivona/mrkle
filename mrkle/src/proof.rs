@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 #![allow(clippy::needless_return)]
-#[allow(clippy::collapsible_if)]
+#![allow(clippy::collapsible_if)]
 use crate::prelude::*;
 
 use crate::{
