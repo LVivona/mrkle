@@ -1187,7 +1187,6 @@ mod test {
     fn test_building_binary_tree_base_case() {
         let leaves: Vec<&str> = vec!["A"];
         let tree = MrkleTree::<&str, sha1::Sha1>::from(leaves);
-        println!("{tree}");
         assert!(tree.len() == 2);
         assert!(tree.leaves().len() == 1);
     }
@@ -1196,7 +1195,6 @@ mod test {
     fn test_building_binary_tree() {
         let leaves: Vec<&str> = vec!["A", "B", "C", "D", "E"];
         let tree = MrkleTree::<&str, sha1::Sha1>::from(leaves.clone());
-        print!("{tree}");
         assert_eq!(tree.len(), 11);
         for node in &tree {
             if node.is_leaf() {
@@ -1222,9 +1220,12 @@ mod test {
     fn test_building_binary_tree_proof() {
         let leaves: Vec<&str> = vec!["A", "B", "C", "D", "E"];
         let tree = MrkleTree::<&str, sha1::Sha1>::from(leaves.clone());
-        print!("{tree}");
-        let proof = tree.generate_proof(vec![NodeIndex::new(4)]);
-        println!("{proof}");
+        let mut proof = tree.generate_proof(vec![NodeIndex::new(4)]);
+        proof
+            .update_leaf_hash(0, tree.get(4).unwrap().hash().clone())
+            .unwrap();
+
+        assert!(proof.try_validate_basic().is_ok())
     }
 
     #[cfg(feature = "serde")]
