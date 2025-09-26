@@ -23,7 +23,7 @@ sha3 = "0.10.8"
 bincode = { version = "2.0.1", features = ["serde"] }
 
 [features]
-default = ["std", "serde"]
+default = ["std"]
 std = ["thiserror/std"]
 alloc = []
 serde = ["serde/alloc"]
