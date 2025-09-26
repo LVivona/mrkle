@@ -60,10 +60,9 @@ pub enum TreeError {
     #[error("{0}")]
     NodeError(#[from] NodeError),
 
-    // ========== NEW BUILDER-RELATED ERRORS ==========
     /// The builder has already been finalized and cannot be modified.
     ///
-    /// Once a builder is finalized with [`finish()`], no further modifications
+    /// Once a builder is finalized with `finish()`, no further modifications
     /// are allowed to maintain tree integrity.
     #[error("Builder has already been finalized and cannot be modified.")]
     AlreadyFinalized,
