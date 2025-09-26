@@ -978,7 +978,7 @@ impl<T, D: Digest, Ix: IndexType> MrkleTree<T, D, Ix> {
         self.core.iter()
     }
 
-    ///Returns Iterator pattern [`IterIdx`] which returns a [`NodeIndex<Ix>`] of the node.
+    ///Returns Iterator pattern [`IndexIter`] which returns a [`NodeIndex<Ix>`] of the node.
     pub fn iter_idx(&self) -> IndexIter<'_, MrkleNode<T, D, Ix>, Ix> {
         self.core.iter_idx()
     }

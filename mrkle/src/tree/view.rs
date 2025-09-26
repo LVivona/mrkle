@@ -49,13 +49,13 @@ impl<'s, N: Node<Ix>, Ix: IndexType> TreeView<'s, N, Ix> {
         }
     }
 
-    /// Returns Iterator pattern [`Iter`] which returns a
+    /// Returns Iterator pattern [`ViewIter<'s, N, Ix>`] which returns a
     /// unmutable Node reference.
     pub fn iter(self) -> ViewIter<'s, N, Ix> {
         ViewIter::new(self)
     }
 
-    /// Returns Iterator pattern [`IterIdx`] which returns a
+    /// Returns Iterator pattern [`ViewIndexIter`] which returns a
     /// [`NodeIndex<Ix>`] of the node.
     ///
     /// # Example

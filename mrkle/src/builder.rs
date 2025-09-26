@@ -28,7 +28,7 @@ use crate::{
 ///
 /// 1. **Creation**: Create a new builder with [`new()`](Self::new) or [`with_capacity()`](Self::with_capacity)
 /// 2. **Construction**: Add leaves and internal nodes using insertion methods
-/// 3. **Validation**: Optionally validate the structure with [`validate()`](Self::validate)
+/// 3. **Validation**: Optionally validate the structure with `validate()`
 /// 4. **Finalization**: Complete the tree with [`finish()`](Self::finish)
 ///
 /// # Examples

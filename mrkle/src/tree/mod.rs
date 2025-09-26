@@ -8,7 +8,7 @@ use crate::TreeError;
 use crate::prelude::*;
 
 pub use borrow::TreeView;
-pub use iter::{Fifo, IndexIter, Iter, Lifo, TraversalOrder};
+pub use iter::{Fifo, IndexIter, Iter, Lifo, TraversalOrder, ViewIndexIter, ViewIter};
 pub use node::{IndexType, MutNode, Node, NodeIndex};
 
 pub(crate) use node::DefaultIx;
@@ -472,7 +472,7 @@ impl<N: Node<Ix>, Ix: IndexType> Tree<N, Ix> {
         Iter::new(self)
     }
 
-    /// Returns Iterator pattern [`IterIdx`] which returns a
+    /// Returns Iterator pattern [`IndexIter`] which returns a
     /// [`NodeIndex<Ix>`] of the node.
     #[inline]
     pub fn iter_idx(&self) -> IndexIter<'_, N, Ix> {
