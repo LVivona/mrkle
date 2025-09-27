@@ -1,163 +1,251 @@
 use blake2::{Blake2b512, Blake2s256};
-use crypto::digest::{Digest, DynDigest};
-use pyo3::exceptions::PyValueError;
+use crypto::digest::{
+    Digest, FixedOutput, FixedOutputReset, Output, OutputSizeUser, Reset, Update,
+};
 use pyo3::prelude::*;
+use pyo3::types::PyBytes;
+use pyo3::Bound as PyBound;
 use sha1::Sha1;
 use sha2::{Sha224, Sha256, Sha384, Sha512};
 use sha3::{Keccak224, Keccak256, Keccak384, Keccak512};
 
-struct InnerHash(Box<dyn DynDigest + 'static>);
+macro_rules! py_digest {
+    ($classname:tt, $name:ident, $digest:ty, $size:ty, $output:tt) => {
+        #[pyclass(name = $classname)]
+        pub struct $name($digest);
 
-unsafe impl Sync for InnerHash {}
-unsafe impl Send for InnerHash {}
-
-impl InnerHash {
-    fn new(value: Box<dyn DynDigest + 'static>) -> Self {
-        Self(value)
-    }
-
-    fn from_digest<T: DynDigest + Send + Sync + 'static>(digest: T) -> Self {
-        Self(Box::new(digest))
-    }
-}
-
-impl InnerHash {
-    fn update(&mut self, data: &[u8]) {
-        self.0.update(data);
-    }
-
-    fn finalize_reset(&mut self) -> Box<[u8]> {
-        self.0.finalize_reset()
-    }
-
-    fn box_clone(&self) -> Box<dyn DynDigest> {
-        self.0.box_clone()
-    }
-
-    fn output_size(&self) -> usize {
-        self.0.output_size()
-    }
-}
-
-#[pyclass(name = "HASH")]
-struct PyHasher {
-    hasher: InnerHash,
-    name: String,
-}
-
-#[pymethods]
-impl PyHasher {
-    #[new]
-    fn new(kind: &str) -> PyResult<Self> {
-        let (hasher, name) = match kind.to_lowercase().as_str() {
-            "sha1" => (InnerHash::from_digest(Sha1::new()), String::from("sha1")),
-            "sha224" => (
-                InnerHash::from_digest(Sha224::new()),
-                String::from("sha224"),
-            ),
-            "sha256" => (
-                InnerHash::from_digest(Sha256::new()),
-                String::from("sha256"),
-            ),
-            "sha384" => (
-                InnerHash::from_digest(Sha384::new()),
-                String::from("sha384"),
-            ),
-            "sha512" => (
-                InnerHash::from_digest(Sha512::new()),
-                String::from("sha512"),
-            ),
-            "keccak224" => (
-                InnerHash::from_digest(Keccak224::new()),
-                String::from("keccak224"),
-            ),
-            "keccak256" => (
-                InnerHash::from_digest(Keccak256::new()),
-                String::from("keccak256"),
-            ),
-            "keccak384" => (
-                InnerHash::from_digest(Keccak384::new()),
-                String::from("keccak384"),
-            ),
-            "keccak512" => (
-                InnerHash::from_digest(Keccak512::new()),
-                String::from("keccak512"),
-            ),
-            "blake2b512" => (
-                InnerHash::from_digest(Blake2b512::new()),
-                String::from("blake2b512"),
-            ),
-            "blake2s256" => (
-                InnerHash::from_digest(Blake2s256::new()),
-                String::from("blake2s256"),
-            ),
-            _ => {
-                return Err(PyValueError::new_err(format!(
-                    "Unsupported hash kind: {}",
-                    kind
-                )))
+        #[pymethods]
+        impl $name {
+            #[new]
+            pub fn new() -> Self {
+                Self(<$digest>::new())
             }
-        };
 
-        Ok(Self { hasher, name })
-    }
+            #[staticmethod]
+            #[pyo3(name = "new_with_prefix")]
+            pub fn new_with_prefix_py(data: PyBound<'_, PyBytes>) -> Self {
+                Self(<$digest>::new_with_prefix(data.as_bytes()))
+            }
 
-    fn update(&mut self, data: &[u8]) {
-        self.hasher.update(data);
-    }
+            #[pyo3(name = "update")]
+            pub fn update_bytes(&mut self, data: PyBound<'_, PyBytes>) {
+                Update::update(&mut self.0, data.as_bytes())
+            }
 
-    #[inline]
-    fn digest(&mut self) -> Vec<u8> {
-        self.hasher.box_clone().finalize().to_vec()
-    }
+            #[pyo3(name = "finalize")]
+            pub fn finalize_py(slf: PyRef<Self>, py: Python<'_>) -> Py<PyBytes> {
+                let result = slf.0.clone().finalize();
+                PyBytes::new(py, &result).unbind()
+            }
 
-    fn hexdigest(&mut self) -> String {
-        hex::encode(self.digest())
-    }
+            #[pyo3(name = "finalize_reset")]
+            pub fn finalize_reset_py(&mut self, py: Python<'_>) -> PyResult<Py<PyBytes>>
+            where
+                $digest: FixedOutputReset,
+            {
+                let result = FixedOutputReset::finalize_fixed_reset(&mut self.0);
+                Ok(PyBytes::new(py, &result).unbind())
+            }
 
-    #[getter]
-    fn digest_size(&self) -> usize {
-        self.hasher.output_size()
-    }
+            #[pyo3(name = "reset")]
+            pub fn reset_digest(&mut self)
+            where
+                $digest: Reset,
+            {
+                Reset::reset(&mut self.0)
+            }
 
-    fn copy(&self) -> Self {
-        Self {
-            hasher: InnerHash::new(self.hasher.box_clone()),
-            name: self.name.clone(),
+            #[staticmethod]
+            #[pyo3(name = "digest")]
+            pub fn digest_bytes(py: Python<'_>, data: PyBound<'_, PyBytes>) -> Py<PyBytes> {
+                let result = <$digest>::digest(data.as_bytes());
+                PyBytes::new(py, &result).unbind()
+            }
+
+            #[staticmethod]
+            pub fn output_size() -> usize {
+                $output
+            }
+
+            fn __repr__(&self) -> String {
+                format!(
+                    "<{} _mrkle_rs.crypto.HASH object at {:p}>",
+                    $classname, self
+                )
+            }
+
+            fn __str__(&self) -> String {
+                self.__repr__()
+            }
         }
-    }
 
-    #[getter]
-    fn name(&self) -> &str {
-        &self.name
-    }
-
-    #[getter]
-    fn block_size(&self) -> usize {
-        match self.name.as_str() {
-            "sha1" => 64,
-            "sha224" => 64,
-            "sha256" => 64,
-            "sha384" => 128,
-            "sha512" => 128,
-            "keccak224" => 144,
-            "keccak256" => 136,
-            "keccak384" => 104,
-            "keccak512" => 72,
-            "blake2b512" => 128,
-            "blake2s256" => 64,
-            _ => 64,
+        impl OutputSizeUser for $name {
+            type OutputSize = $size;
         }
-    }
 
-    fn __repr__(&self) -> String {
-        format!("<{} _mrkle_rs.crypto.HASH object at {:p}>", self.name, self)
-    }
+        impl Update for $name {
+            fn update(&mut self, data: &[u8]) {
+                Update::update(&mut self.0, data)
+            }
+        }
 
-    fn __str__(&self) -> String {
-        self.__repr__()
-    }
+        impl Digest for $name {
+            fn new() -> Self {
+                Self(<$digest>::new())
+            }
+
+            fn new_with_prefix(data: impl AsRef<[u8]>) -> Self {
+                Self(<$digest>::new_with_prefix(data))
+            }
+
+            fn update(&mut self, data: impl AsRef<[u8]>) {
+                Update::update(&mut self.0, data.as_ref())
+            }
+
+            fn chain_update(mut self, data: impl AsRef<[u8]>) -> Self {
+                Update::update(&mut self.0, data.as_ref());
+                self
+            }
+
+            fn finalize_into_reset(&mut self, out: &mut Output<Self>)
+            where
+                Self: FixedOutputReset,
+            {
+                FixedOutputReset::finalize_into_reset(&mut self.0, out)
+            }
+
+            fn finalize_into(self, out: &mut Output<Self>) {
+                FixedOutput::finalize_into(self.0, out)
+            }
+
+            fn finalize(self) -> crypto::digest::Output<Self> {
+                self.0.finalize()
+            }
+
+            fn finalize_reset(&mut self) -> crypto::digest::Output<Self>
+            where
+                Self: FixedOutputReset,
+            {
+                FixedOutputReset::finalize_fixed_reset(&mut self.0)
+            }
+
+            fn reset(&mut self)
+            where
+                Self: Reset,
+            {
+                Reset::reset(&mut self.0)
+            }
+
+            fn output_size() -> usize {
+                $output
+            }
+
+            fn digest(data: impl AsRef<[u8]>) -> crypto::digest::Output<Self> {
+                <$digest>::digest(data)
+            }
+        }
+
+        impl Reset for $name
+        where
+            $digest: Reset,
+        {
+            fn reset(&mut self) {
+                Reset::reset(&mut self.0)
+            }
+        }
+
+        impl FixedOutputReset for $name {
+            fn finalize_into_reset(&mut self, out: &mut Output<Self>) {
+                FixedOutputReset::finalize_into_reset(&mut self.0, out)
+            }
+        }
+
+        impl FixedOutput for $name {
+            fn finalize_into(self, out: &mut Output<Self>) {
+                FixedOutput::finalize_into(self.0, out)
+            }
+        }
+
+        unsafe impl Sync for $name {}
+        unsafe impl Send for $name {}
+    };
 }
+
+py_digest!("sha1", PySha1Wrapper, Sha1, crypto::digest::consts::U20, 20);
+py_digest!(
+    "sha224",
+    PySha224Wrapper,
+    Sha224,
+    crypto::digest::consts::U28,
+    28
+);
+py_digest!(
+    "sha256",
+    PySha256Wrapper,
+    Sha256,
+    crypto::digest::consts::U32,
+    32
+);
+py_digest!(
+    "sha384",
+    PySha384Wrapper,
+    Sha384,
+    crypto::digest::consts::U48,
+    48
+);
+py_digest!(
+    "sha512",
+    PySha512Wrapper,
+    Sha512,
+    crypto::digest::consts::U64,
+    64
+);
+
+// SHA-3/Keccak family
+py_digest!(
+    "keccak224",
+    PyKeccak224Wrapper,
+    Keccak224,
+    crypto::digest::consts::U28,
+    28
+);
+py_digest!(
+    "keccak256",
+    PyKeccak256Wrapper,
+    Keccak256,
+    crypto::digest::consts::U32,
+    32
+);
+py_digest!(
+    "keccak384",
+    PyKeccak384Wrapper,
+    Keccak384,
+    crypto::digest::consts::U48,
+    48
+);
+py_digest!(
+    "keccak512",
+    PyKeccak512Wrapper,
+    Keccak512,
+    crypto::digest::consts::U64,
+    64
+);
+
+// BLAKE2 family
+py_digest!(
+    "blake2s256",
+    PyBlake2s256Wrapper,
+    Blake2s256,
+    crypto::digest::consts::U32,
+    32
+);
+py_digest!(
+    "blake2b512",
+    PyBlake2b512Wrapper,
+    Blake2b512,
+    crypto::digest::consts::U64,
+    64
+);
 
 /// Register all custom crypto with the Python module.
 ///
@@ -172,7 +260,10 @@ impl PyHasher {
 #[pymodule]
 pub(crate) fn register_crypto(m: &Bound<'_, PyModule>) -> PyResult<()> {
     let exce_m = PyModule::new(m.py(), "crypto")?;
-    exce_m.add_class::<PyHasher>()?;
+
+    exce_m.add_class::<PySha224Wrapper>()?;
+    exce_m.add_class::<PySha224Wrapper>()?;
+    exce_m.add_class::<PySha256Wrapper>()?;
 
     m.add_submodule(&exce_m)
 }
