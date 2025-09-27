@@ -261,9 +261,21 @@ py_digest!(
 pub(crate) fn register_crypto(m: &Bound<'_, PyModule>) -> PyResult<()> {
     let exce_m = PyModule::new(m.py(), "crypto")?;
 
-    exce_m.add_class::<PySha224Wrapper>()?;
+    exce_m.add_class::<PySha1Wrapper>()?;
+
+    // sha2
     exce_m.add_class::<PySha224Wrapper>()?;
     exce_m.add_class::<PySha256Wrapper>()?;
+    exce_m.add_class::<PySha384Wrapper>()?;
+    exce_m.add_class::<PySha512Wrapper>()?;
+
+    exce_m.add_class::<PyKeccak224Wrapper>()?;
+    exce_m.add_class::<PyKeccak256Wrapper>()?;
+    exce_m.add_class::<PyKeccak384Wrapper>()?;
+    exce_m.add_class::<PyKeccak512Wrapper>()?;
+
+    exce_m.add_class::<PyBlake2b512Wrapper>()?;
+    exce_m.add_class::<PyBlake2s256Wrapper>()?;
 
     m.add_submodule(&exce_m)
 }

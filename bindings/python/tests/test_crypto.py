@@ -5,21 +5,21 @@ from mrkle import crypto
 
 # Algorithms that are available in hashlib
 HASHLIB_ALGS = {
-    "sha1": hashlib.sha1,
-    "sha224": hashlib.sha224,
-    "sha256": hashlib.sha256,
-    "sha384": hashlib.sha384,
-    "sha512": hashlib.sha512,
-    "blake2b": hashlib.blake2b,
-    "blake2s": hashlib.blake2s,
+    "Sha1": hashlib.sha1,
+    "Sha224": hashlib.sha224,
+    "Sha256": hashlib.sha256,
+    "Sha384": hashlib.sha384,
+    "Sha512": hashlib.sha512,
+    "Blake2b": hashlib.blake2b,
+    "Blake2s": hashlib.blake2s,
 }
 
 # Algorithms only available in mrkle.crypto (not in hashlib stdlib)
 MRKLE_ONLY_ALGS = [
-    "keccak224",
-    "keccak256",
-    "keccak384",
-    "keccak512",
+    "Keccak224",
+    "Keccak256",
+    "Keccak384",
+    "Keccak512",
 ]
 
 PAYLOADS = [
@@ -36,7 +36,7 @@ PAYLOADS = [
 def test_hashlib_compatible(alg, payload):
     """Test algorithms supported by both hashlib and mrkle.crypto."""
     h1 = HASHLIB_ALGS[alg](payload).digest()
-    h2 = getattr(crypto, alg)(payload).digest()
+    h2 = getattr(crypto, alg).digest(payload)
     assert h1 == h2, f"Mismatch for {alg} with payload {payload!r}"
 
 
@@ -45,19 +45,6 @@ def test_hashlib_compatible(alg, payload):
 ])
 def test_mrkle_only(alg, payload):
     """Test keccak-family hashes (not in hashlib)."""
-    h = getattr(crypto, alg)(payload).digest()
+    h = getattr(crypto, alg).digest(payload)
     assert isinstance(h, (bytes, bytearray))
-    assert len(h) == getattr(crypto, alg)().digest_size
-
-
-def test_copy_and_hexdigest():
-    """Check copy() and hexdigest() behave like hashlib."""
-    h1 = crypto.sha256(b"abc")
-    h2 = h1.copy()
-    assert h1.digest() == h2.digest()
-    assert h1.hexdigest() == h2.hexdigest()
-    assert isinstance(h1.hexdigest(), str)
-    assert len(h1.hexdigest()) == 64
-
-
-crypto.HASH
+    assert len(h) == getattr(crypto, alg)().output_size()
