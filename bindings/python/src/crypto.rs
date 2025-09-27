@@ -67,6 +67,23 @@ macro_rules! py_digest {
                 $output
             }
 
+            #[staticmethod]
+            pub fn name() -> String {
+                $classname.to_string()
+            }
+
+            fn __setattr__(&self, _name: &str, _value: PyObject) -> PyResult<()> {
+                Err(PyErr::new::<pyo3::exceptions::PyAttributeError, _>(
+                    format!("{} objects are immutable", $classname),
+                ))
+            }
+
+            fn __delattr__(&self, _name: &str) -> PyResult<()> {
+                Err(PyErr::new::<pyo3::exceptions::PyAttributeError, _>(
+                    format!("{} objects are immutable", $classname),
+                ))
+            }
+
             fn __repr__(&self) -> String {
                 format!(
                     "<{} _mrkle_rs.crypto.HASH object at {:p}>",
