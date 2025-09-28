@@ -19,6 +19,9 @@ define docs_command
 	RUSTDOCFLAGS="--html-in-header=$(KATEX_HEADER)" cargo doc --no-deps --target-dir=$(TARGET_DIR) $(1)
 endef
 
+mrkle:
+	cargo build --release -p mrkle && maturin develop --release -m bindings/python/Cargo.toml
+
 # Generate documentation for bintensors with a custom header
 docs: $(TARGET_DIR) $(KATEX_HEADER)
 	$(call docs_command)
@@ -27,4 +30,4 @@ docs: $(TARGET_DIR) $(KATEX_HEADER)
 docs-open: $(TARGET_DIR) $(KATEX_HEADER)
 	$(call docs_command,--open)
 
-.PHONY: docs docs-open
+.PHONY: docs docs-open mrkle
