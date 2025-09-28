@@ -1,47 +1,67 @@
 """
-Cryptographic digest definitions and utility functions for Merkle trees, and proof.
+Cryptographic digest definitions and utility functions for
+Merkle trees, nodes and proofs.
 
-This module provides common cryptographic hash algorithms (SHA, SHA3/Keccak, BLAKE2)
-and helper functions to create digest objects by name.
+This module provides common cryptographic
+hash algorithms (SHA, SHA3/Keccak, BLAKE2) and helper
+functions to create digest objects by name.
 """
 
 from __future__ import annotations
+from typing import AbstractSet, Dict, Optional, Type
 from mrkle._mrkle_rs import crypto as _crypto
-
-from typing import AbstractSet, Dict
 from mrkle.crypto.typing import Digest
 
 __all__ = [
     "new",
-    "Sha1", "Sha224", "Sha256", "Sha384", "Sha512",
-    "Keccak224", "Keccak256", "Keccak384", "Keccak512",
-    "Blake2s", "Blake2b",
-    "Digest"
+    "Sha1",
+    "Sha224",
+    "Sha256",
+    "Sha384",
+    "Sha512",
+    "Keccak224",
+    "Keccak256",
+    "Keccak384",
+    "Keccak512",
+    "Blake2s",
+    "Blake2b",
+    "sha1",
+    "sha224",
+    "sha256",
+    "sha384",
+    "sha512",
+    "keccak224",
+    "keccak256",
+    "keccak384",
+    "keccak512",
+    "blake2b",
+    "blake2s",
+    "Digest",
 ]
 
 
-# SHA-1 algorithms
-Sha1: Digest = _crypto.sha1
+# SHA-1
+Sha1: Type[Digest] = _crypto.sha1
 
-# SHA-2 algorithms
-Sha224: Digest = _crypto.sha224
-Sha256: Digest = _crypto.sha256
-Sha384: Digest = _crypto.sha384
-Sha512: Digest = _crypto.sha512
+# SHA-2
+Sha224: Type[Digest] = _crypto.sha224
+Sha256: Type[Digest] = _crypto.sha256
+Sha384: Type[Digest] = _crypto.sha384
+Sha512: Type[Digest] = _crypto.sha512
 
-# SHA-3 / Keccak algorithms
-Keccak224: Digest = _crypto.keccak224
-Keccak256: Digest = _crypto.keccak256
-Keccak384: Digest = _crypto.keccak384
-Keccak512: Digest = _crypto.keccak512
+# SHA-3 / Keccak
+Keccak224: Type[Digest] = _crypto.keccak224
+Keccak256: Type[Digest] = _crypto.keccak256
+Keccak384: Type[Digest] = _crypto.keccak384
+Keccak512: Type[Digest] = _crypto.keccak512
 
-# BLAKE2 algorithms
-Blake2s: Digest = _crypto.blake2s256
-Blake2b: Digest = _crypto.blake2b512
+# BLAKE2
+Blake2s: Type[Digest] = _crypto.blake2s256
+Blake2b: Type[Digest] = _crypto.blake2b512
 
-_algorithms_map: Dict[str, Digest] = {
-    "black2s": Blake2s,
-    "black2b": Blake2b,
+_algorithms_map: Dict[str, Type[Digest]] = {
+    "blake2s": Blake2s,
+    "blake2b": Blake2b,
     "keccak224": Keccak224,
     "keccak256": Keccak256,
     "keccak384": Keccak384,
@@ -52,6 +72,95 @@ _algorithms_map: Dict[str, Digest] = {
     "sha384": Sha384,
     "sha512": Sha512,
 }
+
+
+def sha1(data: Optional[bytes] = None) -> Digest:
+    """Create a SHA-1 hash object."""
+    digest : Digest = _algorithms_map["sha1"]()
+    if data is not None:
+        digest.update(data)
+    return digest
+
+
+def sha224(data: Optional[bytes] = None) -> Digest:
+    """Create a SHA-224 hash object."""
+    digest = _algorithms_map["sha224"]()
+    if data is not None:
+        digest.update(data)
+    return digest
+
+
+def sha256(data: Optional[bytes] = None) -> Digest:
+    """Create a SHA-256 hash object."""
+    digest = _algorithms_map["sha256"]()
+    if data is not None:
+        digest.update(data)
+    return digest
+
+
+def sha384(data: Optional[bytes] = None) -> Digest:
+    """Create a SHA-384 hash object."""
+    digest = _algorithms_map["sha384"]()
+    if data is not None:
+        digest.update(data)
+    return digest
+
+
+def sha512(data: Optional[bytes] = None) -> Digest:
+    """Create a SHA-512 hash object."""
+    digest = _algorithms_map["sha512"]()
+    if data is not None:
+        digest.update(data)
+    return digest
+
+
+def keccak224(data: Optional[bytes] = None) -> Digest:
+    """Create a Keccak-224 hash object."""
+    digest = _algorithms_map["keccak224"]()
+    if data is not None:
+        digest.update(data)
+    return digest
+
+
+def keccak256(data: Optional[bytes] = None) -> Digest:
+    """Create a Keccak-256 hash object."""
+    digest = _algorithms_map["keccak256"]()
+    if data is not None:
+        digest.update(data)
+    return digest
+
+
+def keccak384(data: Optional[bytes] = None) -> Digest:
+    """Create a Keccak-384 hash object."""
+    digest = _algorithms_map["keccak384"]()
+    if data is not None:
+        digest.update(data)
+    return digest
+
+
+def keccak512(data: Optional[bytes] = None) -> Digest:
+    """Create a Keccak-512 hash object."""
+    digest = _algorithms_map["keccak512"]()
+    if data is not None:
+        digest.update(data)
+    return digest
+
+
+def blake2b(data: Optional[bytes] = None) -> Digest:
+    """Create a BLAKE2b hash object."""
+    digest = _algorithms_map["blake2b"]()
+    if data is not None:
+        digest.update(data)
+    return digest
+
+
+def blake2s(data: Optional[bytes] = None) -> Digest:
+    """Create a BLAKE2s hash object."""
+    digest = _algorithms_map["blake2s"]()
+    if data is not None:
+        digest.update(data)
+    return digest
+
 
 def new(name: str) -> Digest:
     """Create a new digest object by algorithm name.
@@ -82,8 +191,6 @@ def algorithms_guaranteed() -> AbstractSet[str]:
 
 def algorithms_available() -> AbstractSet[str]:
     """Return the set of digest algorithms currently available.
-
-    This is equivalent to `algorithms_guaranteed` in the current implementation.
 
     Returns:
         AbstractSet[str]: A set of available algorithm names as strings.
