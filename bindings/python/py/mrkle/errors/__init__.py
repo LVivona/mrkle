@@ -7,8 +7,10 @@ NodeError = errors.NodeError
 HashError = errors.HashError
 SerdeError = errors.SerdeError
 
+
 class HexDecoderError(BaseException):
     pass
+
 
 class HexEncoderError(BaseException):
     pass
