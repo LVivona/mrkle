@@ -6,11 +6,17 @@ This module provides common cryptographic
 hash algorithms (SHA, SHA3/Keccak, BLAKE2) and helper
 functions to create digest objects by name.
 """
-
 from __future__ import annotations
-from typing import AbstractSet, Dict, Optional, Type
+
+from types import MappingProxyType
+from typing import AbstractSet, Mapping, Optional, Type, Final, cast, overload
+from typing_extensions import TypeAlias
+
 from mrkle._mrkle_rs import crypto as _crypto
 from mrkle.crypto.typing import Digest
+from mrkle.typing import _D
+
+_Digest: TypeAlias = _D
 
 __all__ = [
     "new",
@@ -59,7 +65,8 @@ Keccak512: Type[Digest] = _crypto.keccak512
 Blake2s: Type[Digest] = _crypto.blake2s256
 Blake2b: Type[Digest] = _crypto.blake2b512
 
-_algorithms_map: Dict[str, Type[Digest]] = {
+# READ-ONLY ACCESS
+_algorithms_map: Final[Mapping[str, Type[Digest]]] = MappingProxyType({
     "blake2s": Blake2s,
     "blake2b": Blake2b,
     "keccak224": Keccak224,
@@ -71,8 +78,7 @@ _algorithms_map: Dict[str, Type[Digest]] = {
     "sha256": Sha256,
     "sha384": Sha384,
     "sha512": Sha512,
-}
-
+})
 
 def sha1(data: Optional[bytes] = None) -> Digest:
     """Create a SHA-1 hash object."""
@@ -162,11 +168,22 @@ def blake2s(data: Optional[bytes] = None) -> Digest:
     return digest
 
 
-def new(name: str) -> Digest:
+@overload
+def new(name: str) -> _Digest:
+    ...
+
+
+@overload
+def new(name: str, *, data: Optional[bytes] = None) -> _Digest:
+    ...
+
+
+def new(name: str, *, data: Optional[bytes] = None) -> _Digest:
     """Create a new digest object by algorithm name.
 
     Args:
         name (str): The name of the digest algorithm (case-insensitive).
+        data (bytes, optional): Initial data to update the digest with.
 
     Returns:
         Digest: The corresponding digest object.
@@ -175,7 +192,10 @@ def new(name: str) -> Digest:
         ValueError: If the algorithm name is not supported.
     """
     if digest := _algorithms_map.get(name.lower()):
-        return digest()
+        d: Digest = digest()
+        if data is not None:
+            d.update(data)
+        return cast(_Digest, d)
     else:
         raise ValueError(f"{name} is not a supported digest.")
 
