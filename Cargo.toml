@@ -1,0 +1,22 @@
+[workspace]
+resolver = "3"
+members = [
+  "mrkle",
+  "bindings/python"
+]
+
+[workspace.dependencies]
+serde = { version = "1.0.219", default-features = false, features = ["derive"] }
+serde_json = "1.0.145"
+thiserror = { version = "2.0.12", default-features = false }
+crypto = { version = "0.5.1", default-features = false, features = ["digest"] }
+hashbrown = { version = "0.15.4", features = ["serde"] }
+faster-hex = "0.10.0"
+text_trees = "0.1.2"
+
+pyo3 = { version = "0.24", features = ["abi3", "abi3-py38", "extension-module"] }
+
+sha1 = "0.10.6"
+sha2 = "0.10.9"
+sha3 = "0.10.8"
+blake2 = "0.10.6"

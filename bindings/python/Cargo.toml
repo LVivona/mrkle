@@ -9,15 +9,12 @@ crate-type = ["cdylib"]
 
 [dependencies]
 mrkle = { path = "../../mrkle", default-features = false, features = ["std", "serde"] }
-serde = { version = "1.0.219", default-features = false, features = ["derive"] }
-pyo3 = { version = "0.24", features = [
-    'abi3',
-    'abi3-py38',
-    "extension-module",
-] }
-sha1 = "0.10.6"
-sha2 = "0.10.9"
-sha3 = "0.10.8"
-blake2 = "0.10.6"
-crypto = { version = "0.5.1", default-features = false, features = ["digest"] }
-hex = "0.4.3"
+
+serde = { workspace = true }
+serde_json = { workspace = true }
+pyo3 = { workspace = true }
+sha1 = { workspace = true }
+sha2 = { workspace = true }
+sha3 = { workspace = true }
+blake2 = { workspace = true }
+crypto = { workspace = true }
