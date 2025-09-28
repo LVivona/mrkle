@@ -1,4 +1,9 @@
-""""""
+"""mrkle is a fast and flexible Merkle Tree library built with Rust and PyO3.
+
+It provides efficient construction of Merkle Trees,
+verification of Merkle Proofs for single and multiple elements,
+and generic support for any hashable data type.
+"""
 from __future__ import annotations
 from ._mrkle_rs import __version__
 

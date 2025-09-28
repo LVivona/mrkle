@@ -86,7 +86,7 @@ macro_rules! py_digest {
 
             fn __repr__(&self) -> String {
                 format!(
-                    "<{} _mrkle_rs.crypto.HASH object at {:p}>",
+                    "<{} _mrkle_rs.crypto.Digest object at {:p}>",
                     $classname, self
                 )
             }

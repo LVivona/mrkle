@@ -76,7 +76,7 @@ _algorithms_map: Dict[str, Type[Digest]] = {
 
 def sha1(data: Optional[bytes] = None) -> Digest:
     """Create a SHA-1 hash object."""
-    digest : Digest = _algorithms_map["sha1"]()
+    digest: Digest = _algorithms_map["sha1"]()
     if data is not None:
         digest.update(data)
     return digest
@@ -175,7 +175,7 @@ def new(name: str) -> Digest:
         ValueError: If the algorithm name is not supported.
     """
     if digest := _algorithms_map.get(name.lower()):
-        return digest
+        return digest()
     else:
         raise ValueError(f"{name} is not a supported digest.")
 

@@ -3,10 +3,6 @@ from typing import Protocol, runtime_checkable
 
 @runtime_checkable
 class Digest(Protocol):
-
-    def new_with_prefix(data: bytes) -> "Digest":
-        ...
-
     def update(self, data: bytes) -> None:
         ...
 
@@ -17,6 +13,10 @@ class Digest(Protocol):
         ...
 
     def reset(self) -> None:
+        ...
+
+    @staticmethod
+    def new_with_prefix(data: bytes) -> "Digest":
         ...
 
     @staticmethod
@@ -41,5 +41,3 @@ class Digest(Protocol):
 
     def __str__(self) -> str:
         ...
-
-    def __call__(self, *args, **kwargs):...
