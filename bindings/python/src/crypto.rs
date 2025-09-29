@@ -11,8 +11,14 @@ use sha3::{Keccak224, Keccak256, Keccak384, Keccak512};
 
 macro_rules! py_digest {
     ($classname:tt, $name:ident, $digest:ty, $size:ty, $output:tt) => {
-        #[pyclass(name = $classname)]
+        #[pyclass(name = $classname, eq)]
         pub struct $name($digest);
+
+        impl PartialEq for $name {
+            fn eq(&self, other: &Self) -> bool {
+                std::any::type_name_of_val(&self.0) == std::any::type_name_of_val(&other.0)
+            }
+        }
 
         #[pymethods]
         impl $name {
@@ -91,8 +97,20 @@ macro_rules! py_digest {
                 )
             }
 
+            #[inline]
             fn __str__(&self) -> String {
-                self.__repr__()
+                let mut chars = $classname.chars();
+                format!(
+                    "{}()",
+                    chars
+                        .next()
+                        .map(|f| f.to_uppercase().collect::<String>() + chars.as_str())
+                        .unwrap_or_default()
+                )
+            }
+
+            fn __format__(&self, _spec: &str) -> String {
+                self.__str__()
             }
         }
 
