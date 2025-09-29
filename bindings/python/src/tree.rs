@@ -250,6 +250,15 @@ macro_rules! py_mrkle_tree {
                 self.inner.capacity()
             }
 
+            #[inline]
+            #[pyo3(name = "leaves")]
+            pub fn leaves_py(&self) -> Vec<$node> {
+                self.leaves()
+                    .iter()
+                    .map(|leaf| self.inner.get(leaf.index()).unwrap().clone())
+                    .collect()
+            }
+
             fn __len__(&self) -> usize {
                 self.len()
             }

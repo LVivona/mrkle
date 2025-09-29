@@ -47,9 +47,14 @@ class MrkleTree(Generic[_D]):
         return self._inner.root
 
     @property
-    def leaves(self) -> List[Node]:
-        """Return MrkleNode[_D] from MrkleTree"""
-        return self._inner.leaves()
+    def leaves(self) -> List[MrkleNode[_D]]:
+        """Return list of MrkleNode[_D] from MrkleTree[_D]"""
+        return list(
+            map(
+                lambda x: MrkleNode._construct_node_backend(x, self._digest),
+                self._inner.leaves(),
+            )
+        )
 
     def dtype(self) -> _D:
         """Return Digest type"""
@@ -77,14 +82,14 @@ class MrkleTree(Generic[_D]):
                 f"{name} is not digested that a supported with in MrkleTree."
             )
 
-    def generate_proof(self, leaves: Set[Node]) -> "MrkleProof[_D]":
+    def generate_proof(self, leaves: Set[MrkleNode[_D]]) -> "MrkleProof[_D]":
         """Generate proof from MrkleTree"""
         return MrkleProof(self, leaves)
 
     @classmethod
-    def _construct_tree_backend(cls, inner: _TreeT, digest: _D) -> "Tree":
+    def _construct_tree_backend(cls, tree: _TreeT, digest: _D) -> "MrkleTree[_D]":
         obj = object.__new__(cls)
-        object.__setattr__(obj, "_inner", inner)
+        object.__setattr__(obj, "_inner", tree)
         object.__setattr__(obj, "_digest", digest)
         return obj
 
@@ -125,7 +130,10 @@ class MrkleTree(Generic[_D]):
 
     def __str__(self) -> str:
         root: str = self._inner.root()
-        return f"MrkleTree(root={root[0 : min(len(root), 4)]}, length={len(self)}, dtype={self._digest.name()})"
+        return (
+            f"MrkleTree(root={root[0 : min(len(root), 4)]},"
+            f" length={len(self)}, dtype={self._digest.name()})"
+        )
 
 
 Tree: TypeAlias = MrkleTree[_D]
