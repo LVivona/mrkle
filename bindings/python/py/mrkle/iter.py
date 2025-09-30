@@ -8,6 +8,23 @@ from mrkle.typing import D as _D, SLOT_T as _SLOT_T
 
 
 class MrkleTreeIter(Generic[_D], Iterator[MrkleNode[_D]]):
+    """Merkle tree iterator interface.
+
+    This class provides a generic iterator over a Merkle tree, traversing
+    the nodes in breadth-first order with a specified digest algorithm.
+
+    Examples:
+        >>> from mrkle.tree import MrkleTree
+        >>> from mrkle.iter import MrkleTreeIter
+        >>> tree = MrkleTree.from_leaves([b"data1", b"data2"], name="sha256")
+        >>> for node in tree:
+        ...     print(node)
+        ...
+        MrkleNode(id=5b6d, leaf=False, dtype=Sha256())
+        MrkleNode(id=5b41, leaf=True, dtype=Sha256())
+        MrkleNode(id=d98c, leaf=True, dtype=Sha256())
+    """
+
     _inner: _IterableT
     _dtype: str
     __slots__: _SLOT_T = ("_inner", "_dtype")
