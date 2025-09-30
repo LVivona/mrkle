@@ -1,5 +1,6 @@
 from __future__ import annotations
-from typing import Generic, Iterator
+from collections.abc import Iterator
+from typing import Generic
 
 from mrkle._tree import TreeT as _TreeT, IterableT as _IterableT
 from mrkle.node import MrkleNode
@@ -32,7 +33,7 @@ class MrkleTreeIter(Generic[_D], Iterator[MrkleNode[_D]]):
         self,
     ) -> MrkleNode[_D]:
         if node := next(self._inner):
-            return MrkleNode(node)
+            return MrkleNode._construct_from_node_t(node)
         else:
             raise StopIteration
 

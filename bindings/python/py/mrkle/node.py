@@ -1,11 +1,14 @@
 from __future__ import annotations
+
 from mrkle.crypto import new
 from mrkle.crypto.typing import Digest
 from mrkle.typing import D as _D, Buffer, SLOT_T as _SLOT_T
-from mrkle._tree import NodeT as _NodeT, _NODE_MAP
+from mrkle._tree import NodeT as _NodeT, NODE_MAP
 
 from typing import Generic, Union, Optional, overload, cast
-from typing_extensions import TypeAlias
+
+
+__all__ = ["MrkleNode"]
 
 
 class MrkleNode(Generic[_D]):
@@ -29,8 +32,18 @@ class MrkleNode(Generic[_D]):
     __slots__: _SLOT_T = ("_inner", "_dtype")
 
     def __init__(self, node: _NodeT) -> None:
-        self._inner = node
-        self._dtype = node.dtype().name()
+        raise TypeError(
+            f"Cannot instantiate {self.__class__.__name__} directly. "
+            "Use MrkleNode.leaf(...) to create leaf nodes."
+        )
+
+    @classmethod
+    def _construct_from_node_t(cls, node: _NodeT) -> "MrkleNode[_D]":
+        dtype: Digest = node.dtype()
+        obj = object.__new__(cls)
+        object.__setattr__(obj, "_inner", node)
+        object.__setattr__(obj, "_dtype", dtype.name())
+        return obj
 
     @classmethod
     def __construct_node_backend(cls, node: _NodeT, dtype: Digest) -> "MrkleNode[_D]":
@@ -112,7 +125,7 @@ class MrkleNode(Generic[_D]):
         digest: Digest = new(name, data=buffer)
         value = digest.finalize_reset()
 
-        if inner := _NODE_MAP.get(name.lower()):
+        if inner := NODE_MAP.get(name.lower()):
             node: _NodeT = inner.leaf_with_digest(buffer, value)
             return cls.__construct_node_backend(node, digest)
         else:
@@ -138,6 +151,7 @@ class MrkleNode(Generic[_D]):
         Raises:
             AttributeError: Always, since MrkleNode objects are immutable.
         """
+
         raise AttributeError(f"{repr(self)} objects are immutable")
 
     def __delattr__(self, name: str) -> None:
@@ -186,6 +200,3 @@ class MrkleNode(Generic[_D]):
     def __hash__(self) -> int:
         """Compute the hash of the node for use in sets or dict keys."""
         return hash(self.digest())
-
-
-Node: TypeAlias = MrkleNode[_D]

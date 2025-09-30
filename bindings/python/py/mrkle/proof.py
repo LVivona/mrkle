@@ -10,8 +10,8 @@ Example:
     >>> from mrkle.proof import MerkleProof
     >>> leaves = [b'leaf1', b'leaf2', b'leaf3']
     >>> tree = MerkleTree.from_leaves(leaves)
-    >>> proof = tree.get_proof(1)  # proof for 'leaf2'
-    >>> MerkleProof(proof).verify(tree.root_hash, b'leaf2')
+    >>> leaf = tree.leaves()[0]
+    >>> proof = tree.generates_proof({leaf})
     True
 
 Notes:
@@ -21,13 +21,16 @@ Notes:
 """
 
 from __future__ import annotations
-from typing import Generic, AbstractSet
+from collections.abc import Set
+from typing import Generic
 
+from mrkle.typing import D as _D
 from mrkle.node import MrkleNode
-from mrkle.typing import _D
+from mrkle._tree import TreeT
+
+
+__all__ = ["MrkleProof"]
 
 
 class MrkleProof(Generic[_D]):
-    def __init__(
-        self, tree: "MrkleTree[_D]", leaves: AbstractSet[MrkleNode[_D]]
-    ) -> None: ...
+    def __init__(self, tree: "TreeT", leaves: Set["MrkleNode[_D]"]) -> None: ...
