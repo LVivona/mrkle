@@ -7,70 +7,59 @@ from typing import (
     Generic,
     Union,
     Optional,
-    List,
     overload,
 )
+from mrkle.crypto.typing import Digest
 from typing_extensions import TypeAlias
 
-from mrkle._mrkle_rs import tree
-
 from mrkle.crypto import new
-from mrkle.typing import _D, Buffer, _TreeT
-from mrkle.proof import MrkleProof
+from mrkle.typing import D as _D, Buffer
 from mrkle.iter import MrkleTreeIter
-from mrkle.node import MrkleNode, Node
-
-_TREE_MAP = {
-    "blake2s": tree.MrkleTreeBlake2s,
-    "blake2b": tree.MrkleTreeBlake2b,
-    "keccak224": tree.MrkleTreeKeccak224,
-    "keccak256": tree.MrkleTreeKeccak256,
-    "keccak384": tree.MrkleTreeKeccak384,
-    "keccak512": tree.MrkleTreeKeccak512,
-    "sha1": tree.MrkleTreeSha1,
-    "sha224": tree.MrkleTreeSha224,
-    "sha256": tree.MrkleTreeSha256,
-    "sha384": tree.MrkleTreeSha384,
-    "sha512": tree.MrkleTreeSha512,
-}
+from mrkle.node import MrkleNode
+from mrkle._tree import TreeT as _TreeT, _TREE_MAP
 
 
 class MrkleTree(Generic[_D]):
-    __slots__ = ("_inner", "_digest")
+    _inner: _TreeT
+    _dtype: _D
 
-    def __init__(self, *args, **kwds):
-        raise TypeError("Direct instantiation of MrkleTree is not allowed.")
+    __slots__ = ("_inner", "_dtype")
 
-    @property
-    def root(self) -> bytes:
-        """Return root of MrkleTree[_D]"""
-        return self._inner.root
+    def __init__(self, tree: _TreeT):
+        self._inner = tree
+        self._dtype = tree.dtype()
 
-    @property
-    def leaves(self) -> List[MrkleNode[_D]]:
+    def root(self) -> str:
+        """Return root hex string"""
+        return self._inner.root()
+
+    def leaves(self) -> list[MrkleNode[_D]]:
         """Return list of MrkleNode[_D] from MrkleTree[_D]"""
         return list(
             map(
-                lambda x: MrkleNode._construct_node_backend(x, self._digest),
+                lambda x: MrkleNode[_D](x),
                 self._inner.leaves(),
             )
         )
 
     def dtype(self) -> _D:
         """Return Digest type"""
-        return self._digest
+        return self._dtype
+
+    def _capacity(self) -> int:
+        return self._inner.capacity()
 
     @classmethod
     def from_leaves(
-        cls, leaves: List[Union[str, Buffer]], *, name: Optional[str] = None
+        cls, leaves: list[Union[str, Buffer]], *, name: Optional[str] = None
     ) -> "MrkleTree[_D]":
         """"""
         if name is None:
             name = "sha1"
-        digest: _D = new(name)
+        digest = new(name)
         name = digest.name()
 
-        buffer: List[bytes] = [
+        buffer: list[bytes] = [
             leaf.encode("utf-8") if isinstance(leaf, str) else bytes(leaf)
             for leaf in leaves
         ]
@@ -87,19 +76,25 @@ class MrkleTree(Generic[_D]):
         return MrkleProof(self, leaves)
 
     @classmethod
-    def _construct_tree_backend(cls, tree: _TreeT, digest: _D) -> "MrkleTree[_D]":
+    def _construct_tree_backend(cls, tree: _TreeT, dtype: Digest) -> "MrkleTree[_D]":
+        assert tree.dtype() == dtype, (
+            f"Missmatch {tree.dtype():!s} does not match {dtype:!s}"
+        )
         obj = object.__new__(cls)
         object.__setattr__(obj, "_inner", tree)
-        object.__setattr__(obj, "_digest", digest)
+        object.__setattr__(obj, "_dtype", dtype)
         return obj
 
-    @overload
-    def __getitem__(self, key: slice) -> List[Node]: ...
+    def _internal(self) -> _TreeT:
+        return self._inner
 
     @overload
-    def __getitem__(self, key: Sequence[int]) -> List[Node]: ...
+    def __getitem__(self, key: slice) -> list[MrkleNode[_D]]: ...
 
-    def __getitem__(self, key: Union[int, slice, Sequence[int]]) -> List[Node]:
+    @overload
+    def __getitem__(self, key: Sequence[int]) -> list[MrkleNode[_D]]: ...
+
+    def __getitem__(self, key: Union[int, slice, Sequence[int]]) -> list[MrkleNode[_D]]:
         if isinstance(key, int):
             return list()
         elif isinstance(key, slice):
@@ -110,14 +105,16 @@ class MrkleTree(Generic[_D]):
             raise TypeError(f"Invalid index type: {type(key)}")
 
     def __iter__(self) -> "MrkleTreeIter[_D]":
-        return MrkleTreeIter.from_tree(self._inner.__iter__(), self._digest)
+        return MrkleTreeIter.from_tree(self._inner, self._dtype)
 
     def __eq__(self, other: object) -> bool:
-        if not isinstance(other, MrkleNode):
-            return NotImplemented
-        if type(self._inner) is not type(other._inner):
+        if isinstance(other, MrkleTree):
+            if self.dtype() != other.dtype():
+                return False
+
+            return self._inner == other._inner
+        else:
             return False
-        return self._inner == other._inner
 
     def __len__(self) -> int:
         return len(self._inner)
@@ -126,14 +123,21 @@ class MrkleTree(Generic[_D]):
         return hash((type(self._inner), self._inner))
 
     def __repr__(self) -> str:
-        return f"<{self._digest.name()} mrkle.tree.MrkleTree object at {hex(id(self))}>"
+        return f"<{self._dtype.name()} mrkle.tree.MrkleTree object at {hex(id(self))}>"
 
     def __str__(self) -> str:
         root: str = self._inner.root()
         return (
             f"MrkleTree(root={root[0 : min(len(root), 4)]},"
-            f" length={len(self)}, dtype={self._digest.name()})"
+            f" length={len(self)}, dtype={self._dtype:!s})"
         )
+
+    def __format__(self, format_spec: str, /) -> str:
+        return super().__format__(format_spec)
+
+
+class MrkleProof(Generic[_D]):
+    def __init__(self, tree: "MrkleTree[_D]", leaves: Set[MrkleNode[_D]]) -> None: ...
 
 
 Tree: TypeAlias = MrkleTree[_D]

@@ -6,17 +6,17 @@ This module provides common cryptographic
 hash algorithms (SHA, SHA3/Keccak, BLAKE2) and helper
 functions to create digest objects by name.
 """
+
 from __future__ import annotations
 
 from types import MappingProxyType
-from typing import AbstractSet, Mapping, Optional, Type, Final, cast, overload
-from typing_extensions import TypeAlias
+from collections.abc import Mapping, Set
+from typing import Optional, Type, Final
 
 from mrkle._mrkle_rs import crypto as _crypto
 from mrkle.crypto.typing import Digest
-from mrkle.typing import _D
+from mrkle.typing import D as _D
 
-_Digest: TypeAlias = _D
 
 __all__ = [
     "new",
@@ -47,38 +47,41 @@ __all__ = [
 
 
 # SHA-1
-Sha1: Type[Digest] = _crypto.sha1
+Sha1 = _crypto.sha1
 
 # SHA-2
-Sha224: Type[Digest] = _crypto.sha224
-Sha256: Type[Digest] = _crypto.sha256
-Sha384: Type[Digest] = _crypto.sha384
-Sha512: Type[Digest] = _crypto.sha512
+Sha224 = _crypto.sha224
+Sha256 = _crypto.sha256
+Sha384 = _crypto.sha384
+Sha512 = _crypto.sha512
 
 # SHA-3 / Keccak
-Keccak224: Type[Digest] = _crypto.keccak224
-Keccak256: Type[Digest] = _crypto.keccak256
-Keccak384: Type[Digest] = _crypto.keccak384
-Keccak512: Type[Digest] = _crypto.keccak512
+Keccak224 = _crypto.keccak224
+Keccak256 = _crypto.keccak256
+Keccak384 = _crypto.keccak384
+Keccak512 = _crypto.keccak512
 
 # BLAKE2
-Blake2s: Type[Digest] = _crypto.blake2s256
-Blake2b: Type[Digest] = _crypto.blake2b512
+Blake2s = _crypto.blake2s256
+Blake2b = _crypto.blake2b512
 
 # READ-ONLY ACCESS
-_algorithms_map: Final[Mapping[str, Type[Digest]]] = MappingProxyType({
-    "blake2s": Blake2s,
-    "blake2b": Blake2b,
-    "keccak224": Keccak224,
-    "keccak256": Keccak256,
-    "keccak384": Keccak384,
-    "keccak512": Keccak512,
-    "sha1": Sha1,
-    "sha224": Sha224,
-    "sha256": Sha256,
-    "sha384": Sha384,
-    "sha512": Sha512,
-})
+_algorithms_map: Final[Mapping[str, Type[Digest]]] = MappingProxyType(
+    {
+        "blake2s": Blake2s,
+        "blake2b": Blake2b,
+        "keccak224": Keccak224,
+        "keccak256": Keccak256,
+        "keccak384": Keccak384,
+        "keccak512": Keccak512,
+        "sha1": Sha1,
+        "sha224": Sha224,
+        "sha256": Sha256,
+        "sha384": Sha384,
+        "sha512": Sha512,
+    }
+)
+
 
 def sha1(data: Optional[bytes] = None) -> Digest:
     """Create a SHA-1 hash object."""
@@ -168,17 +171,7 @@ def blake2s(data: Optional[bytes] = None) -> Digest:
     return digest
 
 
-@overload
-def new(name: str) -> _Digest:
-    ...
-
-
-@overload
-def new(name: str, *, data: Optional[bytes] = None) -> _Digest:
-    ...
-
-
-def new(name: str, *, data: Optional[bytes] = None) -> _Digest:
+def new(name: str, *, data: Optional[bytes] = None) -> Digest:
     """Create a new digest object by algorithm name.
 
     Args:
@@ -192,27 +185,27 @@ def new(name: str, *, data: Optional[bytes] = None) -> _Digest:
         ValueError: If the algorithm name is not supported.
     """
     if digest := _algorithms_map.get(name.lower()):
-        d: Digest = digest()
+        d = digest()
         if data is not None:
             d.update(data)
-        return cast(_Digest, d)
+        return d
     else:
         raise ValueError(f"{name} is not a supported digest.")
 
 
-def algorithms_guaranteed() -> AbstractSet[str]:
+def algorithms_guaranteed() -> Set[str]:
     """Return the set of digest algorithm names guaranteed to be available.
 
     Returns:
-        AbstractSet[str]: A set of algorithm names as strings.
+        Set[str]: A set of algorithm names as strings.
     """
     return set(_algorithms_map.keys())
 
 
-def algorithms_available() -> AbstractSet[str]:
+def algorithms_available() -> Set[str]:
     """Return the set of digest algorithms currently available.
 
     Returns:
-        AbstractSet[str]: A set of available algorithm names as strings.
+        Set[str]: A set of available algorithm names as strings.
     """
     return algorithms_guaranteed()
