@@ -96,13 +96,13 @@ pub struct MrkleNode<T, D: Digest, Ix: IndexType = DefaultIx> {
     /// The internal data of the node.
     payload: Payload<T>,
     /// The parents of this node, if any.
-    parent: Option<NodeIndex<Ix>>,
+    pub parent: Option<NodeIndex<Ix>>,
     /// The children of this node.
     ///
     /// Dependent on the [`Tree`] if the node contains children.
     /// The [`NodeIndex`] points to a location in [`Tree`]
     /// buffer.
-    children: Vec<NodeIndex<Ix>>,
+    pub(crate) children: Vec<NodeIndex<Ix>>,
     /// The cryptographic hash of this node's contents
     ///
     /// Produced by the [`Hasher`] trait. Leaves are derived from the
@@ -325,7 +325,7 @@ impl<T, D: Digest, Ix: IndexType> MrkleNode<T, D, Ix> {
     ///
     /// This method is `pub(crate)` as internal node creation should typically be
     /// managed by the tree construction algorithms rather than external users.
-    pub(crate) fn internal(children: Vec<NodeIndex<Ix>>, hash: GenericArray<D>) -> Self {
+    pub fn internal(children: Vec<NodeIndex<Ix>>, hash: GenericArray<D>) -> Self {
         Self {
             payload: Payload::Internal,
             parent: None,
