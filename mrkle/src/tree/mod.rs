@@ -69,6 +69,17 @@ impl<N: Node<Ix>, Ix: IndexType> Tree<N, Ix> {
         self.nodes.capacity()
     }
 
+    /// Set the root index of the tree
+    pub fn set_root(&mut self, root: Option<NodeIndex<Ix>>) {
+        self.root = root;
+    }
+
+    /// Retrun the starting index.
+    #[inline]
+    pub fn start(&self) -> Option<NodeIndex<Ix>> {
+        self.root.clone()
+    }
+
     /// Returns a reference to the root node.
     ///
     /// # Panics
@@ -521,6 +532,34 @@ impl<N: Node<Ix>, Ix: IndexType> Tree<N, Ix> {
             }
         }
         None
+    }
+}
+
+impl<N: Node<Ix>, Ix: IndexType> core::ops::Index<usize> for Tree<N, Ix> {
+    type Output = N;
+
+    fn index(&self, index: usize) -> &Self::Output {
+        &self.nodes[index]
+    }
+}
+
+impl<N: Node<Ix>, Ix: IndexType> core::ops::IndexMut<usize> for Tree<N, Ix> {
+    fn index_mut(&mut self, index: usize) -> &mut Self::Output {
+        &mut self.nodes[index]
+    }
+}
+
+impl<N: Node<Ix>, Ix: IndexType> core::ops::Index<NodeIndex<Ix>> for Tree<N, Ix> {
+    type Output = N;
+
+    fn index(&self, index: NodeIndex<Ix>) -> &Self::Output {
+        &self.nodes[index.index()]
+    }
+}
+
+impl<N: Node<Ix>, Ix: IndexType> core::ops::IndexMut<NodeIndex<Ix>> for Tree<N, Ix> {
+    fn index_mut(&mut self, index: NodeIndex<Ix>) -> &mut Self::Output {
+        &mut self.nodes[index.index()]
     }
 }
 

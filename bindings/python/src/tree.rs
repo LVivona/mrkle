@@ -1,8 +1,6 @@
 #![allow(dead_code)]
 #![allow(non_camel_case_types)]
 
-use std::collections::VecDeque;
-
 use pyo3::prelude::*;
 use pyo3::types::{PyBytes, PyType};
 use pyo3::Bound as PyBound;
@@ -12,15 +10,13 @@ use crate::crypto::{
     PyKeccak384Wrapper, PyKeccak512Wrapper, PySha1Wrapper, PySha224Wrapper, PySha256Wrapper,
     PySha384Wrapper, PySha512Wrapper,
 };
-use mrkle::{
-    GenericArray, Hasher, HexDisplay, MrkleHasher, MrkleNode, Node, NodeIndex, Tree, TreeView,
-};
+use mrkle::{GenericArray, Hasher, Iter, MrkleHasher, MrkleNode, Node, NodeIndex, Tree};
 
 macro_rules! py_mrkle_node {
     ($name:ident, $digest:ty, $classname:literal) => {
         #[repr(C)]
         #[derive(Clone)]
-        #[pyclass(name = $classname, frozen)]
+        #[pyclass(name = $classname, frozen, eq)]
         pub struct $name {
             inner: MrkleNode<Box<[u8]>, $digest, usize>,
         }
@@ -61,10 +57,19 @@ macro_rules! py_mrkle_node {
 
         #[pymethods]
         impl $name {
+            #[staticmethod]
+            fn dtype() -> $digest {
+                <$digest>::new()
+            }
+
             #[inline]
-            #[pyo3(name = "hash")]
-            fn hash_str(&self) -> String {
-                format!("{}", self.inner.to_hex())
+            fn digest(&self) -> &[u8] {
+                self.inner.hash()
+            }
+
+            #[inline]
+            fn hexdigest(&self) -> String {
+                hex::encode(self.inner.hash())
             }
 
             #[inline]
@@ -183,10 +188,21 @@ py_mrkle_node!(
 macro_rules! py_mrkle_tree {
     ($name:ident, $iter_name:ident, $node:ty, $digest:ty, $classname:literal, $itername:literal) => {
         #[repr(C)]
-        #[pyclass(name = $classname)]
+        #[pyclass(name = $classname, eq)]
         struct $name {
             inner: Tree<$node, usize>,
         }
+
+        impl PartialEq for $name {
+            fn eq(&self, other: &Self) -> bool {
+                if self.root() != other.root() {
+                    return false;
+                }
+
+                self.len() == other.len() && self.iter().eq(other.iter())
+            }
+        }
+        impl Eq for $name {}
 
         #[pyclass(name = $itername)]
         struct $iter_name {
@@ -234,13 +250,12 @@ macro_rules! py_mrkle_tree {
 
         #[pymethods]
         impl $name {
-            #[pyo3(name = "root")]
+            #[inline]
             fn root(&self) -> String {
-                format!("{}", self.root_hex())
+                format!("{}", self.inner.root().to_hex())
             }
 
             #[inline]
-            #[pyo3(name = "is_empty")]
             pub fn is_empty(&self) -> bool {
                 self.inner.is_empty()
             }
@@ -251,28 +266,16 @@ macro_rules! py_mrkle_tree {
             }
 
             #[inline]
-            #[pyo3(name = "leaves")]
-            pub fn leaves_py(&self) -> Vec<$node> {
-                self.leaves()
+            pub fn leaves(&self) -> Vec<$node> {
+                self.leaves_index()
                     .iter()
                     .map(|leaf| self.inner.get(leaf.index()).unwrap().clone())
                     .collect()
             }
 
-            fn __len__(&self) -> usize {
-                self.len()
-            }
-
-            fn __repr__(&self) -> String {
-                format!("<_mrkle_rs.tree.{} object at {:p}>", $classname, self)
-            }
-
-            fn __str__(&self) -> String {
-                self.__repr__()
-            }
-
-            fn tree_pretty_print(&self) -> String {
-                format!("{}", self.inner)
+            #[staticmethod]
+            pub fn dtype() -> $digest {
+                <$digest>::new()
             }
 
             #[inline]
@@ -305,7 +308,8 @@ macro_rules! py_mrkle_tree {
                     return Ok(Self { inner: tree });
                 }
 
-                let mut queue: VecDeque<NodeIndex<usize>> = VecDeque::new();
+                let mut queue: std::collections::VecDeque<NodeIndex<usize>> =
+                    std::collections::VecDeque::new();
                 for payload in leaves {
                     let idx = tree.push(<$node>::leaf(payload));
                     queue.push_back(idx);
@@ -315,10 +319,7 @@ macro_rules! py_mrkle_tree {
                     let lhs = queue.pop_front().unwrap();
                     let rhs = queue.pop_front().unwrap();
 
-                    let hash = hasher.concat(
-                        &tree.get(lhs.index()).unwrap().hash(),
-                        &tree.get(rhs.index()).unwrap().hash(),
-                    );
+                    let hash = hasher.concat(&tree[lhs].hash(), &tree[rhs].hash());
 
                     let parent_idx = tree.push(<$node>::internal(vec![lhs, rhs], hash));
 
@@ -328,16 +329,14 @@ macro_rules! py_mrkle_tree {
                     queue.push_back(parent_idx);
                 }
 
-                tree.set_root(queue.pop_front());
                 Ok(Self { inner: tree })
             }
 
             fn __iter__(slf: PyRef<'_, Self>) -> PyResult<$iter_name> {
-                let mut queue = VecDeque::new();
+                let mut queue = std::collections::VecDeque::new();
 
-                // Start BFS from the root
-                if let Some(root_idx) = slf.inner.start() {
-                    queue.push_back(root_idx.index());
+                if let Some(root) = slf.inner.start() {
+                    queue.push_back(root.index());
                 }
 
                 Ok($iter_name {
@@ -345,14 +344,25 @@ macro_rules! py_mrkle_tree {
                     queue,
                 })
             }
+
+            fn __len__(&self) -> usize {
+                self.len()
+            }
+
+            fn __repr__(&self) -> String {
+                format!("<_mrkle_rs.tree.{} object at {:p}>", $classname, self)
+            }
+
+            fn __str__(&self) -> String {
+                self.__repr__()
+            }
+
+            fn to_string(&self) -> String {
+                format!("{}", self.inner)
+            }
         }
 
         impl $name {
-            /// Return reference to root [`HexDisplay<'_>`].
-            pub fn root_hex(&self) -> HexDisplay<'_> {
-                self.inner.root().to_hex()
-            }
-
             /// Return the length of the [`Tree`] i.e # of nodes
             #[inline]
             pub fn len(&self) -> usize {
@@ -388,7 +398,7 @@ macro_rules! py_mrkle_tree {
 
             /// Return a vector of  [`NodeIndex<Ix>`].
             #[inline]
-            pub fn leaves(&self) -> Vec<NodeIndex<usize>> {
+            pub fn leaves_index(&self) -> Vec<NodeIndex<usize>> {
                 self.inner.leaves()
             }
 
@@ -405,14 +415,9 @@ macro_rules! py_mrkle_tree {
                 self.inner.find(node)
             }
 
-            /// Create a [`TreeView`] of the Merkle tree
-            /// from a node reference as root if found, else return None.
-            #[inline]
-            pub fn subtree_view(
-                &self,
-                root: NodeIndex<usize>,
-            ) -> Option<TreeView<'_, $node, usize>> {
-                self.inner.subtree_view(root)
+            /// Returns Iterator pattern [`Iter`] which returns a unmutable Node reference.
+            pub fn iter(&self) -> Iter<'_, $node, usize> {
+                self.inner.iter()
             }
         }
     };
@@ -516,69 +521,6 @@ py_mrkle_tree!(
     "MrkleTreeKeccak512",
     "MrkleTreeIterKeccak512"
 );
-
-// #[pymethods]
-// impl PyNode {
-//     #[new]
-//     fn new(obj: PyObject, parent: Option<usize>, children: Option<Vec<usize>>) -> Self {
-//         let parent_index = parent.map(NodeIndex::new);
-
-//         let children_indices = if let Some(c) = children {
-//             c.into_iter().map(NodeIndex::new).collect()
-//         } else {
-//             Vec::new()
-//         };
-
-//         Self {
-//             value: obj,
-//             parent: parent_index,
-//             children: children_indices,
-//         }
-//     }
-
-//     fn value<'py>(&self, py: Python<'py>) -> &PyBound<'py, PyAny> {
-//         self.value.bind(py)
-//     }
-
-//     #[getter]
-//     fn children(&self) -> Vec<usize> {
-//         self.children.iter().map(|c| c.index()).collect()
-//     }
-
-//     #[getter]
-//     fn parent(&self) -> Option<usize> {
-//         self.parent.map(|p| p.index())
-//     }
-
-//     fn __repr__(&self) -> String {
-//         format!("<_mrkle_rs.tree.Tree object at {:p}>", self)
-//     }
-
-//     fn __str__(&self) -> String {
-//         format!("{}", self)
-//     }
-// }
-
-// #[pyclass(name = "Tree", frozen)]
-// struct PyMrkleTreeObject {
-//     inner: Tree<PyMrkleNode, usize>,
-// }
-
-// #[pymethods]
-// impl PyMrkleTreeObject {
-//     #[new]
-//     fn new() -> Self {
-//         Self { inner: Tree::new() }
-//     }
-
-//     fn __repr__(&self) -> String {
-//         format!("<_mrkle_rs.tree.Tree object at {:p}>", self)
-//     }
-
-//     fn __str__(&self) -> String {
-//         format!("{}", self.inner)
-//     }
-// }
 
 /// Register MerkleTree data structure.
 ///
