@@ -1,7 +1,11 @@
 """Merkle tree implementations for various hash algorithms."""
 
 from __future__ import annotations
+from types import MappingProxyType
 from typing import Final, Union
+
+from collections.abc import Mapping
+
 from mrkle._mrkle_rs import tree
 
 __all__ = [
@@ -27,8 +31,8 @@ __all__ = [
     "MrkleTreeIterSha256",
     "MrkleTreeIterSha384",
     "MrkleTreeIterSha512",
-    "_TREE_MAP",
-    "_NODE_MAP",
+    "TREE_MAP",
+    "NODE_MAP",
     "NodeT",
     "TreeT",
     "IterableT",
@@ -120,31 +124,35 @@ IterableT = type[
 ]
 
 
-_TREE_MAP: Final[dict[str, TreeT]] = {
-    "blake2s": MrkleTreeBlake2s,
-    "blake2b": MrkleTreeBlake2b,
-    "keccak224": MrkleTreeKeccak224,
-    "keccak256": MrkleTreeKeccak256,
-    "keccak384": MrkleTreeKeccak384,
-    "keccak512": MrkleTreeKeccak512,
-    "sha1": MrkleTreeSha1,
-    "sha224": MrkleTreeSha224,
-    "sha256": MrkleTreeSha256,
-    "sha384": MrkleTreeSha384,
-    "sha512": MrkleTreeSha512,
-}
+TREE_MAP: Final[Mapping[str, TreeT]] = MappingProxyType(
+    {
+        "blake2s": MrkleTreeBlake2s,
+        "blake2b": MrkleTreeBlake2b,
+        "keccak224": MrkleTreeKeccak224,
+        "keccak256": MrkleTreeKeccak256,
+        "keccak384": MrkleTreeKeccak384,
+        "keccak512": MrkleTreeKeccak512,
+        "sha1": MrkleTreeSha1,
+        "sha224": MrkleTreeSha224,
+        "sha256": MrkleTreeSha256,
+        "sha384": MrkleTreeSha384,
+        "sha512": MrkleTreeSha512,
+    }
+)
 
 
-_NODE_MAP: Final[dict[str, NodeT]] = {
-    "blake2s": MrkleNodeBlake2s,
-    "blake2b": MrkleNodeBlake2b,
-    "keccak224": MrkleNodeKeccak224,
-    "keccak256": MrkleNodeKeccak256,
-    "keccak384": MrkleNodeKeccak384,
-    "keccak512": MrkleNodeKeccak512,
-    "sha1": MrkleNodeSha1,
-    "sha224": MrkleNodeSha224,
-    "sha256": MrkleNodeSha256,
-    "sha384": MrkleNodeSha384,
-    "sha512": MrkleNodeSha512,
-}
+NODE_MAP: Final[Mapping[str, NodeT]] = MappingProxyType(
+    {
+        "blake2s": MrkleNodeBlake2s,
+        "blake2b": MrkleNodeBlake2b,
+        "keccak224": MrkleNodeKeccak224,
+        "keccak256": MrkleNodeKeccak256,
+        "keccak384": MrkleNodeKeccak384,
+        "keccak512": MrkleNodeKeccak512,
+        "sha1": MrkleNodeSha1,
+        "sha224": MrkleNodeSha224,
+        "sha256": MrkleNodeSha256,
+        "sha384": MrkleNodeSha384,
+        "sha512": MrkleNodeSha512,
+    }
+)

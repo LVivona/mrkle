@@ -452,5 +452,5 @@ IterableT: TypeAlias = Union[
     MrkleTreeIterSha512,
 ]
 
-_TREE_MAP: Final[dict[str, TreeT]]
-_NODE_MAP: Final[dict[str, NodeT]]
+TREE_MAP: Final[dict[str, TreeT]]
+NODE_MAP: Final[dict[str, NodeT]]
