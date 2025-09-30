@@ -310,6 +310,7 @@ macro_rules! py_mrkle_tree {
 
                 let mut queue: std::collections::VecDeque<NodeIndex<usize>> =
                     std::collections::VecDeque::new();
+
                 for payload in leaves {
                     let idx = tree.push(<$node>::leaf(payload));
                     queue.push_back(idx);
@@ -329,6 +330,7 @@ macro_rules! py_mrkle_tree {
                     queue.push_back(parent_idx);
                 }
 
+                tree.set_root(queue.pop_front());
                 Ok(Self { inner: tree })
             }
 
