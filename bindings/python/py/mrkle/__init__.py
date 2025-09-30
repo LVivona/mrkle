@@ -4,6 +4,7 @@ It provides efficient construction of Merkle Trees,
 verification of Merkle Proofs for single and multiple elements,
 and generic support for any hashable data type.
 """
+
 from __future__ import annotations
 from ._mrkle_rs import __version__
 
@@ -15,8 +16,6 @@ from .errors import (
     SerdeError,
     NodeError,
     ProofError,
-    HexDecoderError,
-    HexEncoderError,
 )
 
 __all__ = [
@@ -28,6 +27,4 @@ __all__ = [
     "SerdeError",
     "NodeError",
     "ProofError",
-    "HexDecoderError",
-    "HexEncoderError",
 ]

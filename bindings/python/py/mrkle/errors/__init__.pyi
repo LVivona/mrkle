@@ -90,33 +90,3 @@ class NodeError(TreeError):
     """
 
     pass
-
-class HexDecoderError(BaseException):
-    """
-    Base Exception for codec hexadecimal decoder.
-
-    # Example
-    ```
-    try:
-        b"\x00".decode("hex")
-    except mrkle.HexDecoderError as e:
-        print(f"Decoder failed: {e}")
-    ```
-    """
-
-    pass
-
-class HexEncoderError(BaseException):
-    """
-    Base Exception for codec hexadecimal encoder.
-
-    # Example
-    ```
-    try:
-        "00".decode("hex")
-    except mrkle.HexDecoderError as e:
-        print(f"Decoder failed: {e}")
-    ```
-    """
-
-    pass
