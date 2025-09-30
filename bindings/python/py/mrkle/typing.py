@@ -1,5 +1,5 @@
 import sys
-from typing import runtime_checkable, Protocol, TypeVar, Union
+from typing import runtime_checkable, Protocol, TypeVar, Union, Literal
 from typing_extensions import TypeAlias
 from mrkle.crypto.typing import Digest
 
@@ -23,47 +23,7 @@ else:
     Buffer: TypeAlias = SupportsBytes
 
 # Internal Rust Digest Trait
-_D = TypeVar("_D", bound=Digest)
+D = TypeVar("D", bound=Digest)
+SLOT_T = tuple[Literal["_inner"], Literal["_dtype"]]
 
-
-_NodeT: TypeAlias = Union[
-    tree.MrkleNodeBlake2s,
-    tree.MrkleNodeBlake2b,
-    tree.MrkleNodeKeccak224,
-    tree.MrkleNodeKeccak256,
-    tree.MrkleNodeKeccak384,
-    tree.MrkleNodeKeccak512,
-    tree.MrkleNodeSha1,
-    tree.MrkleNodeSha224,
-    tree.MrkleNodeSha256,
-    tree.MrkleNodeSha384,
-    tree.MrkleNodeSha512,
-]
-
-_TreeT: TypeAlias = Union[
-    tree.MrkleNodeBlake2s,
-    tree.MrkleNodeBlake2b,
-    tree.MrkleNodeKeccak224,
-    tree.MrkleNodeKeccak256,
-    tree.MrkleNodeKeccak384,
-    tree.MrkleNodeKeccak512,
-    tree.MrkleNodeSha1,
-    tree.MrkleNodeSha224,
-    tree.MrkleNodeSha256,
-    tree.MrkleNodeSha384,
-    tree.MrkleNodeSha512,
-]
-
-_Iter: TypeAlias = Union[
-    tree.MrkleTreeIterBlake2s,
-    tree.MrkleTreeIterBlake2b,
-    tree.MrkleTreeIterKeccak224,
-    tree.MrkleTreeIterKeccak256,
-    tree.MrkleTreeIterKeccak384,
-    tree.MrkleTreeIterKeccak512,
-    tree.MrkleTreeIterSha1,
-    tree.MrkleTreeIterSha224,
-    tree.MrkleTreeIterSha256,
-    tree.MrkleTreeIterSha384,
-    tree.MrkleTreeIterSha512,
-]
+__all__ = ["SLOT_T", "D", "Buffer"]
