@@ -56,3 +56,7 @@ python-source = "py"
 module-name = "mrkle._mrkle_rs"
 bindings = 'pyo3'
 features = ["pyo3/extension-module"]
+
+[[tool.mypy.overrides]]
+module = ["mrkle._mrkle_rs.*"]
+ignore_missing_imports = true
