@@ -340,7 +340,7 @@ class MrkleTree(Generic[_D]):
         Returns:
             int: The hash value of the tree.
         """
-        return hash((type(self._inner), self._inner))
+        return hash((type(self._inner), self.root()))
 
     def __repr__(self) -> str:
         """Return the canonical string representation of the tree.
