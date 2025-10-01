@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import Sequence, Set
 from typing import (
     Generic,
+    Literal,
     Union,
     Optional,
     overload,
@@ -10,6 +11,7 @@ from typing import (
 from mrkle.crypto.typing import Digest
 from typing_extensions import TypeAlias
 
+from mrkle.errors import SerdeError
 from mrkle.crypto import new
 from mrkle.typing import D as _D, Buffer, SLOT_T
 from mrkle.iter import MrkleTreeIter
@@ -211,6 +213,62 @@ class MrkleTree(Generic[_D]):
         """
         return self._inner.to_string()
 
+    @classmethod
+    def loads(
+        cls,
+        data: Union[str, bytes],
+        encoding: Optional[Literal["json", "cbor"]] = None,
+        *,
+        name: Optional[str] = None,
+    ) -> "MrkleTree[_D]":
+        """Deserialize a tree from string (JSON) or bytes (CBOR).
+
+        Args:
+            data: Serialized tree data (str for JSON, bytes for CBOR).
+            encoding: Serialization format used. Defaults to "cbor".
+
+        Returns:
+            MrkleTree[_D]: Deserialized tree instance.
+
+        Examples:
+            >>> tree = MrkleTree.from_leaves([b"a", b"b"], name="sha256")
+            >>> data = tree.dumps(encoding="json")
+            >>> restored = MrkleTree.loads(data, encoding="json")
+            >>> restored == tree
+            True
+        """
+
+        if name is None:
+            return cls._find_loads(data, encoding=encoding)
+        else:
+            if tree := TREE_MAP.get(name):
+                return MrkleTree(tree.loads(data, encoding=encoding))
+            else:
+                raise ValueError(
+                    f"{name} is not a digest algorithm supported by MrkleTree."
+                )
+
+    def dumps(
+        self,
+        encoding: Optional[Literal["json", "cbor"]] = None,
+    ) -> Union[str, bytes]:
+        """Serialize the tree to string (JSON) or bytes (CBOR).
+
+        Args:
+            encoding: Serialization format - "json" returns str, "cbor" returns bytes.
+                     Defaults to "cbor".
+
+        Returns:
+            Union[str, bytes]: Serialized tree data.
+
+        Examples:
+            >>> tree = MrkleTree.from_leaves([b"a", b"b"], name="sha256")
+            >>> json_str = tree.dumps(encoding="json")
+            >>> cbor_bytes = tree.dumps(encoding="cbor")
+            >>> cbor_default = tree.dumps()  # Uses CBOR by default
+        """
+        return self._inner.dumps(encoding=encoding)
+
     to_str = to_string
 
     @classmethod
@@ -248,6 +306,35 @@ class MrkleTree(Generic[_D]):
             TreeT: The wrapped Rust tree instance.
         """
         return self._inner
+
+    @classmethod
+    def _find_loads(
+        cls,
+        data: Union[str, bytes],
+        encoding: Optional[Literal["json", "cbor"]] = None,
+    ) -> "MrkleTree[_D]":
+        """Internal method to find the correct tree type and deserialize.
+
+        Args:
+            data: Serialized tree data.
+            encoding: Serialization format used.
+
+        Returns:
+            MrkleTree[_D]: Deserialized tree instance.
+
+        Raises:
+            SerdeError: If deserialization fails for all tree types.
+        """
+
+        for name, tree_class in TREE_MAP.items():
+            try:
+                inner = tree_class.loads(data, encoding=encoding)
+                digest = new(name)
+                return cls._construct_tree_backend(inner, digest)
+            except Exception:
+                continue
+
+        raise SerdeError("Could not deserialize tree from given data.")
 
     @overload
     def __getitem__(self, key: slice) -> list[MrkleNode[_D]]: ...

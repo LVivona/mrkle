@@ -1,6 +1,6 @@
 """Type stubs for Merkle tree implementations."""
 
-from typing import Final, Iterator, Protocol, Union
+from typing import Final, Iterator, Protocol, Union, Literal, Optional
 from typing_extensions import TypeAlias
 from mrkle.typing import D as _D
 
@@ -28,7 +28,13 @@ class _MrkleTreeBase(Protocol):
     def to_string(self) -> str:
         """Return a string representation of the tree structure."""
         ...
-
+    def dumps(
+        self, encoding: Optional[Literal["json", "cbor"]]
+    ) -> Union[str, bytes]: ...
+    @staticmethod
+    def loads(
+        data: Union[str, bytes], encoding: Optional[Literal["json", "cbor"]]
+    ) -> "TreeT": ...
     def __eq__(self, other: object) -> bool: ...
     def __hash__(self) -> int: ...
 

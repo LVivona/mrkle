@@ -7,6 +7,7 @@ use crate::tree::register_tree;
 pub mod crypto;
 pub mod errors;
 pub mod tree;
+pub mod utils;
 
 /// A Python module implemented in Rust.
 #[pymodule]

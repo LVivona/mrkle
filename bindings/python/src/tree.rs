@@ -1,7 +1,9 @@
 #![allow(dead_code)]
 #![allow(non_camel_case_types)]
 
+use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
+use pyo3::pycell::PyRef;
 use pyo3::types::{PyBytes, PyType};
 use pyo3::Bound as PyBound;
 
@@ -11,6 +13,29 @@ use crate::crypto::{
     PySha384Wrapper, PySha512Wrapper,
 };
 use mrkle::{GenericArray, Hasher, Iter, MrkleHasher, MrkleNode, Node, NodeIndex, Tree};
+
+enum Codec {
+    JSON,
+    CBOR,
+}
+
+impl<'py> FromPyObject<'py> for Codec {
+    fn extract_bound(ob: &Bound<'py, PyAny>) -> PyResult<Self> {
+        if let Ok(value) = ob.extract::<String>() {
+            match value.to_lowercase().as_str() {
+                "json" => Ok(Codec::JSON),
+                "cbor" => Ok(Codec::CBOR),
+                _ => Err(PyValueError::new_err(
+                    "Unable to convert into proper encoding.",
+                )),
+            }
+        } else {
+            return Err(PyValueError::new_err(
+                "Unable to convert into proper encoding.",
+            ));
+        }
+    }
+}
 
 macro_rules! py_mrkle_node {
     ($name:ident, $digest:ty, $classname:literal) => {
@@ -189,8 +214,27 @@ macro_rules! py_mrkle_tree {
     ($name:ident, $iter_name:ident, $node:ty, $digest:ty, $classname:literal, $itername:literal) => {
         #[repr(C)]
         #[pyclass(name = $classname, eq)]
-        struct $name {
+        pub struct $name {
             inner: Tree<$node, usize>,
+        }
+
+        impl serde::Serialize for $name {
+            fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+            where
+                S: serde::Serializer,
+            {
+                self.inner.serialize(serializer)
+            }
+        }
+
+        impl<'de> serde::Deserialize<'de> for $name {
+            fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+            where
+                D: serde::Deserializer<'de>,
+            {
+                let inner = Tree::deserialize(deserializer)?;
+                Ok(Self { inner })
+            }
         }
 
         impl PartialEq for $name {
@@ -361,6 +405,49 @@ macro_rules! py_mrkle_tree {
 
             fn to_string(&self) -> String {
                 format!("{}", self.inner)
+            }
+
+            fn dumps<'py>(
+                &self,
+                py: Python<'py>,
+                encoding: Option<Codec>,
+            ) -> PyResult<Bound<'py, PyAny>> {
+                match encoding {
+                    Some(Codec::JSON) => {
+                        let json_str = serde_json::to_string(&self).map_err(|e| {
+                            PyValueError::new_err(format!("JSON serialization error: {}", e))
+                        })?;
+                        Ok(json_str.into_py(py).into_bound(py))
+                    }
+                    Some(Codec::CBOR) | None => {
+                        let bytes = serde_cbor::to_vec(&self).map_err(|e| {
+                            PyValueError::new_err(format!("CBOR serialization error: {}", e))
+                        })?;
+                        Ok(pyo3::types::PyBytes::new(py, &bytes).into_any())
+                    }
+                }
+            }
+
+            #[staticmethod]
+            fn loads(data: &Bound<'_, PyAny>, encoding: Option<Codec>) -> PyResult<Self> {
+                match encoding {
+                    Some(Codec::JSON) => {
+                        let json_str = data.extract::<String>().map_err(|_| {
+                            PyValueError::new_err("Expected string for JSON encoding")
+                        })?;
+                        serde_json::from_str(&json_str).map_err(|e| {
+                            PyValueError::new_err(format!("JSON deserialization error: {}", e))
+                        })
+                    }
+                    Some(Codec::CBOR) | None => {
+                        let bytes = data.extract::<&[u8]>().map_err(|_| {
+                            PyValueError::new_err("Expected bytes for CBOR encoding")
+                        })?;
+                        serde_cbor::from_slice(bytes).map_err(|e| {
+                            PyValueError::new_err(format!("CBOR deserialization error: {}", e))
+                        })
+                    }
+                }
             }
         }
 
