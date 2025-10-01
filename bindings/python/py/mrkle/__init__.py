@@ -9,6 +9,12 @@ from __future__ import annotations
 from ._mrkle_rs import __version__
 
 from . import crypto
+from . import tree
+from . import node
+
+from .node import MrkleNode
+from .tree import MrkleTree
+
 from .errors import (
     MerkleError,
     TreeError,
@@ -21,6 +27,10 @@ from .errors import (
 __all__ = [
     "__version__",
     "crypto",
+    "tree",
+    "node",
+    "MrkleNode",
+    "MrkleTree",
     "MerkleError",
     "TreeError",
     "HashError",
