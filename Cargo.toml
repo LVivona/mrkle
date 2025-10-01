@@ -6,16 +6,22 @@ members = [
 ]
 
 [workspace.dependencies]
+thiserror = { version = "2.0.12", default-features = false }
+
 serde = { version = "1.0.219", default-features = false, features = ["derive"] }
 serde_json = "1.0.145"
-thiserror = { version = "2.0.12", default-features = false }
-crypto = { version = "0.5.1", default-features = false, features = ["digest"] }
+serde_cbor = "0.10"
+bincode = { version = "2.0.1", features = ["serde"]}
+
 hashbrown = { version = "0.15.4", features = ["serde"] }
+
 faster-hex = "0.10.0"
 text_trees = "0.1.2"
+hex = "0.4.3"
 
 pyo3 = { version = "0.24", features = ["abi3", "abi3-py38", "extension-module"] }
 
+crypto = { version = "0.5.1", default-features = false, features = ["digest"] }
 sha1 = "0.10.6"
 sha2 = "0.10.9"
 sha3 = "0.10.8"
