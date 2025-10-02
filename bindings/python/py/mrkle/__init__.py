@@ -13,7 +13,7 @@ from . import tree
 from . import node
 
 from .node import MrkleNode
-from .tree import MrkleTree
+from .tree import MrkleTree, MrkleProof
 
 from .errors import (
     MerkleError,
@@ -31,6 +31,7 @@ __all__ = [
     "node",
     "MrkleNode",
     "MrkleTree",
+    "MrkleProof",
     "MerkleError",
     "TreeError",
     "HashError",

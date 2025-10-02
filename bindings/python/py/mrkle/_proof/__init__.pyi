@@ -1,0 +1,76 @@
+from collections.abc import Mapping, Sequence
+from typing import Union, Final, Optional, Literal
+from typing_extensions import TypeAlias
+
+from mrkle.tree import MrkleTree
+from mrkle.typing import D as _D
+
+__all__ = [
+    "MrkleProofSha1",
+    "MrkleProofSha224",
+    "MrkleProofSha256",
+    "MrkleProofSha384",
+    "MrkleProofSha512",
+    "MrkleProofKeccak224",
+    "MrkleProofKeccak256",
+    "MrkleProofKeccak384",
+    "MrkleProofKeccak512",
+    "MrkleProofBlake2b",
+    "MrkleProofBlake2s",
+    "PROOF_MAP",
+    "ProofT",
+    "BaseMrkleProof",
+]
+
+# ---- Base interface for all proof classes ----
+
+class BaseMrkleProof:
+    def expected(self) -> bytes: ...
+    def expected_hexdigest(self) -> str: ...
+    @classmethod
+    def generate(
+        cls, tree: MrkleTree[_D], leaves: Union[Sequence[int], int]
+    ) -> "ProofT": ...
+    @staticmethod
+    def dtype() -> _D: ...
+    def __len__(self) -> int: ...
+    def __repr__(self) -> str: ...
+    def __str__(self) -> str: ...
+    def to_string(self) -> str: ...
+    def dumps(
+        self, encoding: Optional[Literal["json", "cbor"]] = ...
+    ) -> Union[str, bytes]: ...
+    @staticmethod
+    def loads(
+        data: Union[str, bytes], encoding: Optional[Literal["json", "cbor"]] = ...
+    ) -> "ProofT": ...
+
+class MrkleProofSha1(BaseMrkleProof): ...
+class MrkleProofSha224(BaseMrkleProof): ...
+class MrkleProofSha256(BaseMrkleProof): ...
+class MrkleProofSha384(BaseMrkleProof): ...
+class MrkleProofSha512(BaseMrkleProof): ...
+class MrkleProofKeccak224(BaseMrkleProof): ...
+class MrkleProofKeccak256(BaseMrkleProof): ...
+class MrkleProofKeccak384(BaseMrkleProof): ...
+class MrkleProofKeccak512(BaseMrkleProof): ...
+class MrkleProofBlake2b(BaseMrkleProof): ...
+class MrkleProofBlake2s(BaseMrkleProof): ...
+
+# ---- Type alias and mapping ----
+
+ProofT: TypeAlias = Union[
+    MrkleProofBlake2s,
+    MrkleProofBlake2b,
+    MrkleProofKeccak224,
+    MrkleProofKeccak256,
+    MrkleProofKeccak384,
+    MrkleProofKeccak512,
+    MrkleProofSha1,
+    MrkleProofSha224,
+    MrkleProofSha256,
+    MrkleProofSha384,
+    MrkleProofSha512,
+]
+
+PROOF_MAP: Final[Mapping[str, ProofT]]
