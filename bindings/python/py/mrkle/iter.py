@@ -1,6 +1,7 @@
 from __future__ import annotations
 from collections.abc import Iterator
 from typing import Generic
+from typing_extensions import override
 
 from mrkle._tree import TreeT as _TreeT, IterableT as _IterableT
 from mrkle.node import MrkleNode
@@ -43,9 +44,11 @@ class MrkleTreeIter(Generic[_D], Iterator[MrkleNode[_D]]):
         object.__setattr__(obj, "_dtype", _dtype.name())
         return obj
 
+    @override
     def __iter__(self) -> "MrkleTreeIter[_D]":
         return self
 
+    @override
     def __next__(
         self,
     ) -> MrkleNode[_D]:
@@ -54,8 +57,10 @@ class MrkleTreeIter(Generic[_D], Iterator[MrkleNode[_D]]):
         else:
             raise StopIteration
 
+    @override
     def __repr__(self) -> str:
         return f"<{self._dtype:!s} mrkle.iter.MrkleTreeIter object at {hex(id(self))}>"
 
+    @override
     def __str__(self) -> str:
         return f"MrkleTreeIter(dtype={self._dtype.capitalize()}())"
