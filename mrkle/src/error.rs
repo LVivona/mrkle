@@ -144,9 +144,10 @@ pub enum ProofError {
 }
 
 impl ProofError {
+    /// helper function
     #[inline]
     #[allow(dead_code)]
-    pub(crate) fn out_of_bounds<Ix: IndexType>(len: usize, index: NodeIndex<Ix>) -> ProofError {
+    pub fn out_of_bounds<Ix: IndexType>(len: usize, index: NodeIndex<Ix>) -> ProofError {
         ProofError::from(TreeError::IndexOutOfBounds {
             index: index.index(),
             len,

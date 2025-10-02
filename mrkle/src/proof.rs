@@ -81,7 +81,7 @@ pub struct MrkleProofNode<D: Digest, Ix: IndexType> {
 
 impl<D: Digest, Ix: IndexType> MrkleProofNode<D, Ix> {
     /// Return constructed [`MrkleProofNode`]
-    pub(crate) fn new(
+    pub fn new(
         parent: Option<NodeIndex<Ix>>,
         children: Vec<NodeIndex<Ix>>,
         hash: Option<GenericArray<D>>,
@@ -429,7 +429,7 @@ where
 /// For multiple leaves, a [`MrkleProof`] behaves like a
 /// *dependency tree*: only the minimal set of sibling hashes
 /// needed to recompute the root are included in the proof.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct MrkleProof<D: Digest, Ix: IndexType = DefaultIx> {
     /// Subset of the [`MrkleTree`] that must be constructed
     /// from the leaf hashes within proved to the merkle proof
@@ -445,6 +445,25 @@ pub struct MrkleProof<D: Digest, Ix: IndexType = DefaultIx> {
 }
 
 impl<D: Digest, Ix: IndexType> MrkleProof<D, Ix> {
+    /// Construct unconstructed proof from [`Tree`].
+    pub fn new(proof: Tree<MrkleProofNode<D, Ix>, Ix>, expected: GenericArray<D>) -> Self {
+        let leaves = proof.find_all(|node| node.hash == None && node.is_leaf());
+
+        assert!(
+            !leaves.is_empty(),
+            "Proof must contain at least one leaf with missing hash (hash == None). \
+             Found {} total nodes but no verifiable leaves.",
+            proof.len()
+        );
+
+        Self {
+            core: proof,
+            leaves,
+            valid: None,
+            expected,
+        }
+    }
+
     /// Traverse the node up the tree to the root.
     pub(crate) fn path<T>(
         tree: &MrkleTree<T, D, Ix>,
@@ -677,6 +696,11 @@ impl<D: Digest, Ix: IndexType> MrkleProof<D, Ix> {
     #[inline(always)]
     pub fn expected_entry(&self) -> &entry {
         entry::from_bytes(&self.expected)
+    }
+
+    /// Returns the number of nodes currently in the tree.
+    pub fn len(&self) -> usize {
+        self.core.len()
     }
 
     /// Returns leaf [`MrkleProofNode`] within the Tree.

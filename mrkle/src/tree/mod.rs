@@ -35,6 +35,15 @@ pub struct Tree<N: Node<Ix>, Ix: IndexType = DefaultIx> {
     pub(crate) nodes: Vec<N>,
 }
 
+impl<N: Node<Ix> + Clone, Ix: IndexType> Clone for Tree<N, Ix> {
+    fn clone(&self) -> Self {
+        Self {
+            root: self.root.clone(),
+            nodes: self.nodes.clone(),
+        }
+    }
+}
+
 impl<N: Node<Ix>, Ix: IndexType> Tree<N, Ix> {
     /// Creates an empty tree with no nodes.
     #[inline]
