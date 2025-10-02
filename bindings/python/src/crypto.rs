@@ -11,6 +11,7 @@ use sha3::{Keccak224, Keccak256, Keccak384, Keccak512};
 
 macro_rules! py_digest {
     ($classname:tt, $name:ident, $digest:ty, $size:ty, $output:tt) => {
+        #[derive(Clone)]
         #[pyclass(name = $classname, eq)]
         pub struct $name($digest);
 

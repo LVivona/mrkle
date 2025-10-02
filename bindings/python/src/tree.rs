@@ -4,38 +4,18 @@
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::pycell::PyRef;
-use pyo3::types::{PyBytes, PyType};
+use pyo3::types::{PyBytes, PyDict, PyType};
 use pyo3::Bound as PyBound;
 
-use crate::crypto::{
-    PyBlake2b512Wrapper, PyBlake2s256Wrapper, PyKeccak224Wrapper, PyKeccak256Wrapper,
-    PyKeccak384Wrapper, PyKeccak512Wrapper, PySha1Wrapper, PySha224Wrapper, PySha256Wrapper,
-    PySha384Wrapper, PySha512Wrapper,
+use crate::{
+    codec::Codec,
+    crypto::{
+        PyBlake2b512Wrapper, PyBlake2s256Wrapper, PyKeccak224Wrapper, PyKeccak256Wrapper,
+        PyKeccak384Wrapper, PyKeccak512Wrapper, PySha1Wrapper, PySha224Wrapper, PySha256Wrapper,
+        PySha384Wrapper, PySha512Wrapper,
+    },
 };
 use mrkle::{GenericArray, Hasher, Iter, MrkleHasher, MrkleNode, Node, NodeIndex, Tree};
-
-enum Codec {
-    JSON,
-    CBOR,
-}
-
-impl<'py> FromPyObject<'py> for Codec {
-    fn extract_bound(ob: &Bound<'py, PyAny>) -> PyResult<Self> {
-        if let Ok(value) = ob.extract::<String>() {
-            match value.to_lowercase().as_str() {
-                "json" => Ok(Codec::JSON),
-                "cbor" => Ok(Codec::CBOR),
-                _ => Err(PyValueError::new_err(
-                    "Unable to convert into proper encoding.",
-                )),
-            }
-        } else {
-            return Err(PyValueError::new_err(
-                "Unable to convert into proper encoding.",
-            ));
-        }
-    }
-}
 
 macro_rules! py_mrkle_node {
     ($name:ident, $digest:ty, $classname:literal) => {
@@ -43,7 +23,7 @@ macro_rules! py_mrkle_node {
         #[derive(Clone)]
         #[pyclass(name = $classname, frozen, eq)]
         pub struct $name {
-            inner: MrkleNode<Box<[u8]>, $digest, usize>,
+            pub inner: MrkleNode<Box<[u8]>, $digest, usize>,
         }
 
         unsafe impl Sync for $name {}
@@ -215,7 +195,15 @@ macro_rules! py_mrkle_tree {
         #[repr(C)]
         #[pyclass(name = $classname, eq)]
         pub struct $name {
-            inner: Tree<$node, usize>,
+            pub inner: Tree<$node, usize>,
+        }
+
+        impl Clone for $name {
+            fn clone(&self) -> Self {
+                Self {
+                    inner: self.inner.clone(),
+                }
+            }
         }
 
         impl serde::Serialize for $name {
@@ -407,17 +395,19 @@ macro_rules! py_mrkle_tree {
                 format!("{}", self.inner)
             }
 
+            #[pyo3(text_signature = "(encoding, **kwargs)")]
             fn dumps<'py>(
                 &self,
                 py: Python<'py>,
                 encoding: Option<Codec>,
+                _kwargs: PyBound<'_, PyDict>,
             ) -> PyResult<Bound<'py, PyAny>> {
                 match encoding {
                     Some(Codec::JSON) => {
                         let json_str = serde_json::to_string(&self).map_err(|e| {
                             PyValueError::new_err(format!("JSON serialization error: {}", e))
                         })?;
-                        Ok(json_str.into_py(py).into_bound(py))
+                        Ok(json_str.into_pyobject(py)?.into_any())
                     }
                     Some(Codec::CBOR) | None => {
                         let bytes = serde_cbor::to_vec(&self).map_err(|e| {
@@ -429,7 +419,12 @@ macro_rules! py_mrkle_tree {
             }
 
             #[staticmethod]
-            fn loads(data: &Bound<'_, PyAny>, encoding: Option<Codec>) -> PyResult<Self> {
+            #[pyo3(text_signature = "(data, encoding, **kwargs)")]
+            fn loads(
+                data: &Bound<'_, PyAny>,
+                encoding: Option<Codec>,
+                _kwargs: PyBound<'_, PyDict>,
+            ) -> PyResult<Self> {
                 match encoding {
                     Some(Codec::JSON) => {
                         let json_str = data.extract::<String>().map_err(|_| {
@@ -669,7 +664,6 @@ pub(crate) fn register_tree(m: &Bound<'_, PyModule>) -> PyResult<()> {
     tree_m.add_class::<PyMrkleTreeIterKeccak224>()?;
     tree_m.add_class::<PyMrkleTreeIterKeccak256>()?;
     tree_m.add_class::<PyMrkleTreeIterKeccak384>()?;
-    tree_m.add_class::<PyMrkleTreeIterKeccak512>()?;
     tree_m.add_class::<PyMrkleTreeIterKeccak512>()?;
 
     tree_m.add_class::<PyMrkleTreeIterBlake2b>()?;
