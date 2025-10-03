@@ -283,57 +283,79 @@ impl<Ix: IndexType> From<NodeIndex<Ix>> for usize {
 /// the read-only operations provided by the [`Node`] trait.
 pub trait MutNode<Ix: IndexType = DefaultIx>: Node<Ix> {
     /// Sets the parent index within in node.
-    fn set_parent(&mut self, parent: NodeIndex<Ix>);
+    fn set_parent(&mut self, parent: NodeIndex<Ix>) {
+        unimplemented!()
+    }
 
     /// Removes and returns the parent within the node; if any.
-    fn take_parent(&mut self) -> Option<NodeIndex<Ix>>;
+    fn take_parent(&mut self) -> Option<NodeIndex<Ix>> {
+        unimplemented!()
+    }
 
     /// Adds a child node index within tree to the end of the children list.
     ///
     /// # Panics
     /// Panics if [`Node`] already exsit within list.
-    fn push(&mut self, child: NodeIndex<Ix>);
+    fn push(&mut self, child: NodeIndex<Ix>) {
+        unimplemented!()
+    }
 
     /// Tries to add a child, returning an error if the operation is invalid.
-    fn try_push(&mut self, child: NodeIndex<Ix>) -> Result<(), NodeError>;
+    fn try_push(&mut self, child: NodeIndex<Ix>) -> Result<(), NodeError> {
+        unimplemented!()
+    }
 
     /// Removes and returns the last child, if any.
-    fn pop(&mut self) -> Option<NodeIndex<Ix>>;
+    fn pop(&mut self) -> Option<NodeIndex<Ix>> {
+        unimplemented!()
+    }
 
     /// Inserts a child at the specified position.
     ///
     /// # Panics
     /// Panics if `index > len`.
-    fn insert(&mut self, index: usize, child: NodeIndex<Ix>);
+    fn insert(&mut self, index: usize, child: NodeIndex<Ix>) {
+        unimplemented!()
+    }
 
     /// Removes and returns the child at the specified position.
     ///
     /// # Panics
     /// Panics if `index >= len`.
-    fn remove(&mut self, index: usize) -> NodeIndex<Ix>;
+    fn remove(&mut self, index: usize) -> NodeIndex<Ix> {
+        unimplemented!()
+    }
 
     /// Removes the first occurrence of the specified child.
     /// Returns `true` if the child was found and removed.
-    fn remove_item(&mut self, child: NodeIndex<Ix>) -> bool;
+    fn remove_item(&mut self, child: NodeIndex<Ix>) -> bool {
+        unimplemented!()
+    }
 
     /// Removes all children and returns them as a vector.
-    fn clear(&mut self) -> Vec<NodeIndex<Ix>>;
+    fn clear(&mut self) -> Vec<NodeIndex<Ix>> {
+        unimplemented!()
+    }
 
     /// Retains only the children specified by the predicate.
     fn retain<F>(&mut self, f: F)
     where
-        F: FnMut(&NodeIndex<Ix>) -> bool;
+        F: FnMut(&NodeIndex<Ix>) -> bool,
+    {
+        unimplemented!()
+    }
 
     /// Swaps two children at the given indices.
     ///
     /// # Panics
     /// Panics if either index is out of bounds.
-    fn swap(&mut self, a: usize, b: usize);
+    fn swap(&mut self, a: usize, b: usize) {
+        unimplemented!()
+    }
 
     /// Returns the current capacity for children storage.
     fn capacity(&self) -> usize {
-        // Default: capacity equals current length
-        self.child_count()
+        unimplemented!()
     }
 }
 
