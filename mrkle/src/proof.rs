@@ -766,7 +766,7 @@ impl<D: Digest, Ix: IndexType> MrkleProof<D, Ix> {
         if self
             .leaves
             .iter()
-            .all(|index| self.core.get(index.index()).unwrap().hash().is_some())
+            .any(|index| self.core.get(index.index()).unwrap().hash().is_none())
         {
             return Err(ProofError::IncompleteProof);
         }
