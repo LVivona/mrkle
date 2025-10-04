@@ -763,6 +763,14 @@ impl<D: Digest, Ix: IndexType> MrkleProof<D, Ix> {
 
     /// Breath First Search up the leaves and updating the parent hashes.
     pub fn try_validate_basic(&mut self) -> Result<bool, ProofError> {
+        if self
+            .leaves
+            .iter()
+            .all(|index| self.core.get(index.index()).unwrap().hash().is_some())
+        {
+            return Err(ProofError::IncompleteProof);
+        }
+
         if let Some(valid) = self.valid {
             return Ok(valid);
         }

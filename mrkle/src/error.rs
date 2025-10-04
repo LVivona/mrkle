@@ -129,6 +129,10 @@ pub enum ProofError {
     #[error("Expected a tree length greater then 1.")]
     InvalidSize,
 
+    /// Expected leaf hashes to be updated to expected hashes.
+    #[error("Missing leaf hashes")]
+    IncompleteProof,
+
     /// The computed root hash does not match the expected root hash.
     ///
     /// This typically indicates that the leaves are not ordered as expected
