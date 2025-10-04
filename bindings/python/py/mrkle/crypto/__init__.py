@@ -11,11 +11,10 @@ from __future__ import annotations
 
 from types import MappingProxyType
 from collections.abc import Mapping, Set
-from typing import Optional, Type, Final
+from typing import Optional, Final
 
-from mrkle._mrkle_rs import crypto as _crypto
+from mrkle._mrkle_rs import crypto
 from mrkle.crypto.typing import Digest
-from mrkle.typing import D as _D
 
 
 __all__ = [
@@ -47,26 +46,26 @@ __all__ = [
 
 
 # SHA-1
-Sha1 = _crypto.sha1
+Sha1 = crypto.sha1
 
 # SHA-2
-Sha224 = _crypto.sha224
-Sha256 = _crypto.sha256
-Sha384 = _crypto.sha384
-Sha512 = _crypto.sha512
+Sha224 = crypto.sha224
+Sha256 = crypto.sha256
+Sha384 = crypto.sha384
+Sha512 = crypto.sha512
 
 # SHA-3 / Keccak
-Keccak224 = _crypto.keccak224
-Keccak256 = _crypto.keccak256
-Keccak384 = _crypto.keccak384
-Keccak512 = _crypto.keccak512
+Keccak224 = crypto.keccak224
+Keccak256 = crypto.keccak256
+Keccak384 = crypto.keccak384
+Keccak512 = crypto.keccak512
 
 # BLAKE2
-Blake2s = _crypto.blake2s256
-Blake2b = _crypto.blake2b512
+Blake2s = crypto.blake2s256
+Blake2b = crypto.blake2b512
 
 # READ-ONLY ACCESS
-_algorithms_map: Final[Mapping[str, Type[Digest]]] = MappingProxyType(
+_algorithms_map: Final[Mapping[str, type[Digest]]] = MappingProxyType(
     {
         "blake2s": Blake2s,
         "blake2b": Blake2b,
