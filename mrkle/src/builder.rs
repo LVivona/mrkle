@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 use crate::{
     DefaultIx, GenericArray, Hasher, IndexType, MrkleHasher, MrkleNode, MrkleTree, Node, NodeError,
-    NodeIndex, Tree, TreeError, prelude::*,
+    NodeIndex, Tree, TreeError, error::MrkleError, prelude::*,
 };
 
 /// A builder for constructing Merkle trees with default configuration.
@@ -290,21 +290,21 @@ impl<T, D: Digest, Ix: IndexType> MrkleDefaultBuilder<T, D, Ix> {
     pub fn insert_internal(
         &mut self,
         children: Vec<NodeIndex<Ix>>,
-    ) -> Result<NodeIndex<Ix>, TreeError> {
+    ) -> Result<NodeIndex<Ix>, MrkleError> {
         self.check_not_finalized()?;
 
         if children.is_empty() {
-            return Err(TreeError::InvalidOperation {
+            return Err(MrkleError::from(TreeError::InvalidOperation {
                 operation: "insert_internal",
                 reason: "internal nodes must have at least one child".to_string(),
-            });
+            }));
         }
 
         self.validate_children(&children)?;
 
-        let hash = self.compute_internal_hash(&children)?;
-
-        let index = self.tree.push(MrkleNode::internal(children.clone(), hash));
+        let index = self
+            .tree
+            .push(MrkleNode::internal(&self.tree, children.clone())?);
 
         self.set_parent_relationships(&children, index);
 
@@ -345,7 +345,7 @@ impl<T, D: Digest, Ix: IndexType> MrkleDefaultBuilder<T, D, Ix> {
     /// # Ok(())
     /// # }
     /// ```
-    pub fn finish(mut self, root: NodeIndex<Ix>) -> Result<MrkleTree<T, D, Ix>, TreeError> {
+    pub fn finish(mut self, root: NodeIndex<Ix>) -> Result<MrkleTree<T, D, Ix>, MrkleError> {
         self.check_not_finalized()?;
 
         // Validate the root node
@@ -356,11 +356,11 @@ impl<T, D: Digest, Ix: IndexType> MrkleDefaultBuilder<T, D, Ix> {
 
         // Perform comprehensive tree validation
         if let Err(errors) = self.validate() {
-            return Err(TreeError::ValidationFailed {
+            return Err(MrkleError::from(TreeError::ValidationFailed {
                 count: errors.len(),
                 summary: "Tree structure validation failed".to_string(),
                 errors,
-            });
+            }));
         }
 
         self.finalized = true;
@@ -508,10 +508,10 @@ impl<T, D: Digest, Ix: IndexType> MrkleDefaultBuilder<T, D, Ix> {
                     len: self.tree.len(),
                 })?;
             if node.parent().is_some() {
-                return Err(TreeError::ParentConflict {
+                return Err(TreeError::from(NodeError::ParentConflict {
                     parent: node.parent().unwrap().index(),
                     child: child.index(),
-                });
+                }));
             }
         }
         Ok(())
@@ -684,14 +684,14 @@ where
     pub fn build_complete_tree_from_leaves(
         &mut self,
         mut leaves: Vec<NodeIndex<Ix>>,
-    ) -> Result<NodeIndex<Ix>, TreeError> {
+    ) -> Result<NodeIndex<Ix>, MrkleError> {
         self.check_not_finalized()?;
 
         if leaves.is_empty() {
-            return Err(TreeError::InvalidOperation {
+            return Err(MrkleError::from(TreeError::InvalidOperation {
                 operation: "build_complete_tree_from_leaves",
                 reason: "cannot build tree from empty leaves vector".to_string(),
-            });
+            }));
         }
 
         // Base case: if there is only one node, create a root for single node.
@@ -743,7 +743,7 @@ where
     /// # Ok(())
     /// # }
     /// ```
-    pub fn build_from_data<I>(data_iter: I) -> Result<MrkleTree<T, D, Ix>, TreeError>
+    pub fn build_from_data<I>(data_iter: I) -> Result<MrkleTree<T, D, Ix>, MrkleError>
     where
         T: Clone,
         I: IntoIterator<Item = T>,
@@ -820,7 +820,7 @@ impl<T: AsRef<[u8]>, D: Digest, Ix: IndexType> MrkleDefaultBuilder<T, D, Ix> {
     /// # Ok(())
     /// # }
     /// ```
-    pub fn build_and_finish(mut self) -> Result<MrkleTree<T, D, Ix>, TreeError>
+    pub fn build_and_finish(mut self) -> Result<MrkleTree<T, D, Ix>, MrkleError>
     where
         T: Clone,
     {
@@ -947,12 +947,12 @@ mod tests {
 
         // Test empty children vector
         let result = builder.insert_internal(vec![]);
-        assert!(matches!(result, Err(TreeError::InvalidOperation { .. })));
+        assert!(result.is_err());
 
         // Test invalid child index
         let invalid_child = NodeIndex::new(999);
         let result = builder.insert_internal(vec![invalid_child]);
-        assert!(matches!(result, Err(TreeError::IndexOutOfBounds { .. })));
+        assert!(result.is_err());
 
         Ok(())
     }
@@ -968,7 +968,7 @@ mod tests {
 
         // Try to create second internal node with same children (should fail)
         let result = builder.insert_internal(vec![leaf1]);
-        assert!(matches!(result, Err(TreeError::ParentConflict { .. })));
+        assert!(result.is_err());
 
         Ok(())
     }

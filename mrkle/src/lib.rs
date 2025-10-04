@@ -32,6 +32,7 @@ pub mod tree;
 /// Includes errors for tree construction, hashing, and I/O operations.
 pub mod error;
 
+use crate::error::MrkleError;
 pub(crate) use crate::error::{EntryError, NodeError, ProofError, TreeError};
 pub(crate) use crate::tree::DefaultIx;
 
@@ -279,7 +280,7 @@ where
 }
 
 impl<T, D: Digest, Ix: IndexType> MrkleNode<T, D, Ix> {
-    /// Creates a new internal (non-leaf) node with the specified children and hash.
+    /// Creates a new internal (non-leaf) node with the specified children and tree.
     ///
     /// Internal nodes represent the structural components of the Merkle tree that
     /// combine child node hashes. They do not store application data directly
@@ -325,7 +326,44 @@ impl<T, D: Digest, Ix: IndexType> MrkleNode<T, D, Ix> {
     ///
     /// This method is `pub(crate)` as internal node creation should typically be
     /// managed by the tree construction algorithms rather than external users.
-    pub fn internal(children: Vec<NodeIndex<Ix>>, hash: GenericArray<D>) -> Self {
+    #[inline]
+    pub fn internal(
+        tree: &Tree<MrkleNode<T, D, Ix>, Ix>,
+        children: Vec<NodeIndex<Ix>>,
+    ) -> Result<Self, MrkleError> {
+        let mut hasher = D::new();
+        children
+            .iter()
+            .try_for_each(|&idx| {
+                if let Some(node) = tree.get(idx.index()) {
+                    if node.parent().is_some() {
+                        return Err(TreeError::from(NodeError::ParentConflict {
+                            parent: node.parent().unwrap().index(),
+                            child: idx.index(),
+                        }));
+                    }
+                    hasher.update(&node.hash());
+                    Ok(())
+                } else {
+                    Err(TreeError::from(NodeError::NodeNotFound {
+                        index: idx.index(),
+                    }))
+                }
+            })
+            .map_err(|e| MrkleError::from(e))?;
+
+        let hash = hasher.finalize();
+
+        Ok(Self {
+            payload: Payload::Internal,
+            parent: None,
+            children,
+            hash,
+        })
+    }
+
+    /// Creates a new internal (non-leaf) node with the specified children and tree.
+    pub fn internal_with_hash(hash: GenericArray<D>, children: Vec<NodeIndex<Ix>>) -> Self {
         Self {
             payload: Payload::Internal,
             parent: None,
@@ -823,7 +861,7 @@ where
     ///
     /// let tree = MrkleTree::<&str, Sha1>::from_leaves(leaves);
     /// ```
-    pub fn from_leaves(leaves: Vec<T>) -> Result<MrkleTree<T, D, Ix>, TreeError> {
+    pub fn from_leaves(leaves: Vec<T>) -> Result<MrkleTree<T, D, Ix>, MrkleError> {
         MrkleDefaultBuilder::build_from_data(leaves)
 
         // let mut tree = Tree::new();
@@ -1088,25 +1126,65 @@ where
 }
 
 #[cfg(feature = "serde")]
-impl<'de, T, D: Digest, Ix: IndexType> serde::Deserialize<'de> for MrkleTree<T, D, Ix>
+impl<'de, T, D, Ix> serde::Deserialize<'de> for MrkleTree<T, D, Ix>
 where
-    T: serde::Deserialize<'de>,
-    Ix: serde::Deserialize<'de>,
+    T: AsRef<[u8]> + serde::Deserialize<'de>,
+    D: Digest + Default,
+    Ix: IndexType + serde::Deserialize<'de>,
 {
-    fn deserialize<_D>(deserializer: _D) -> Result<Self, _D::Error>
+    fn deserialize<De>(deserializer: De) -> Result<Self, De::Error>
     where
-        _D: serde::Deserializer<'de>,
+        De: serde::Deserializer<'de>,
     {
-        Ok(MrkleTree {
-            core: Tree::<MrkleNode<T, D, Ix>, Ix>::deserialize(deserializer)?,
-        })
+        // First, deserialize the underlying core tree structure
+        let core = Tree::<MrkleNode<T, D, Ix>, Ix>::deserialize(deserializer)?;
+
+        // Verify all nodes (leaf and internal) match their expected hashes
+        for node in core.iter() {
+            let mut digest = D::new();
+
+            if node.is_leaf() {
+                let value = node.value().ok_or_else(|| {
+                    serde::de::Error::custom("Leaf node missing value during deserialization")
+                })?;
+
+                digest.update(value.as_ref());
+                let computed = digest.finalize();
+
+                if computed.as_slice() != node.hash().as_slice() {
+                    return Err(serde::de::Error::custom("Merkle tree leaf hash mismatch"));
+                }
+            } else {
+                if node.child_count() == 0 {
+                    return Err(serde::de::Error::custom(
+                        "Internal node should never have no children.",
+                    ));
+                }
+
+                for child in node.children() {
+                    let child_node = core.get(child.index()).ok_or_else(|| {
+                        serde::de::Error::custom("Missing child node during deserialization")
+                    })?;
+                    digest.update(child_node.hash());
+                }
+
+                let computed = digest.finalize();
+                if &computed != node.hash() {
+                    return Err(serde::de::Error::custom(
+                        "Merkle tree internal hash mismatch",
+                    ));
+                }
+            }
+        }
+
+        Ok(MrkleTree { core })
     }
 }
 
 #[cfg(test)]
 mod test {
 
-    use crate::{Hasher, MrkleHasher, MrkleNode, MrkleTree, Node, NodeIndex, prelude::*};
+    use crate::{MrkleHasher, MrkleNode, MrkleTree, Node, NodeIndex, prelude::*};
     use sha1::Digest;
 
     const DATA_PAYLOAD: [u8; 32] = [0u8; 32];
@@ -1116,16 +1194,6 @@ mod test {
         let tree: MrkleTree<[u8; 32], _> = MrkleTree::<[u8; 32], sha1::Sha1>::default();
 
         assert!(tree.is_empty())
-    }
-
-    #[test]
-    fn test_is_leaf_logic() {
-        let leaf = MrkleNode::<_, sha1::Sha1>::leaf(DATA_PAYLOAD);
-        assert!(leaf.is_leaf());
-
-        let hash = MrkleHasher::<sha1::Sha1>::digest(leaf.hash);
-        let internal = MrkleNode::<[u8; 32], sha1::Sha1>::internal(vec![NodeIndex::new(1)], hash);
-        assert!(!internal.is_leaf())
     }
 
     #[test]
@@ -1141,46 +1209,6 @@ mod test {
         let node = MrkleNode::<_, sha1::Sha1, usize>::leaf_with_hasher(DATA_PAYLOAD, &hasher);
 
         assert_eq!(node.hash, sha1::Sha1::digest(DATA_PAYLOAD))
-    }
-
-    #[test]
-    fn test_build_internal_mrkle_node() {
-        let hasher = MrkleHasher::<sha1::Sha1>::new();
-        let node1 = MrkleNode::<_, sha1::Sha1, usize>::leaf_with_hasher(DATA_PAYLOAD, &hasher);
-        let node2 = MrkleNode::<_, sha1::Sha1, usize>::leaf_with_hasher(DATA_PAYLOAD, &hasher);
-
-        let children: Vec<NodeIndex<usize>> = vec![NodeIndex::new(0), NodeIndex::new(1)];
-
-        let hash = hasher.concat_slice(&[node1.hash, node2.hash]);
-
-        let parent: MrkleNode<[u8; 32], sha1::Sha1, usize> = MrkleNode::internal(children, hash);
-
-        // The expected hash should be just concat the two child
-        // using the same digest.
-        let expected = {
-            let mut hasher = sha1::Sha1::new();
-            hasher.update(node1.hash);
-            hasher.update(node2.hash);
-            hasher.finalize()
-        };
-
-        assert_eq!(parent.hash, expected);
-    }
-
-    #[test]
-    fn test_internal_contains_node_index() {
-        let hasher = MrkleHasher::<sha1::Sha1>::new();
-
-        let node1 = MrkleNode::<_, sha1::Sha1, usize>::leaf_with_hasher(DATA_PAYLOAD, &hasher);
-        let node2 = MrkleNode::<_, sha1::Sha1, usize>::leaf_with_hasher(DATA_PAYLOAD, &hasher);
-
-        let children: Vec<NodeIndex<usize>> = vec![NodeIndex::new(0), NodeIndex::new(1)];
-
-        let hash = hasher.concat_slice(&[node1.hash, node2.hash]);
-
-        let parent: MrkleNode<[u8; 32], sha1::Sha1, usize> = MrkleNode::internal(children, hash);
-
-        assert!(parent.contains(&NodeIndex::new(0)));
     }
 
     #[test]

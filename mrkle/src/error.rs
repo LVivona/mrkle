@@ -10,6 +10,27 @@ pub enum NodeError {
         /// The duplicate child index.
         child: usize,
     },
+
+    /// Attempted to assign a parent to a node that already has one.
+    ///
+    /// Each non-root node must have a single unique parent.
+    #[error(
+        "Cannot add child {child} to {parent}: \
+         node already has a parent."
+    )]
+    ParentConflict {
+        /// The node that is already the parent.
+        parent: usize,
+        /// The child node in conflict.
+        child: usize,
+    },
+
+    /// An index was used that is outside the bounds of the tree.
+    #[error("Node at {index:?} could not be found with in tree.")]
+    NodeNotFound {
+        /// node index within tree.
+        index: usize,
+    },
 }
 
 /// Errors that may occur when converting a byte slice into an [`entry`](crate::entry).
@@ -40,20 +61,6 @@ pub enum TreeError {
         index: usize,
         /// The number of nodes in the tree.
         len: usize,
-    },
-
-    /// Attempted to assign a parent to a node that already has one.
-    ///
-    /// Each non-root node must have a single unique parent.
-    #[error(
-        "Cannot add child {child} to {parent}: \
-         node already has a parent."
-    )]
-    ParentConflict {
-        /// The node that is already the parent.
-        parent: usize,
-        /// The child node in conflict.
-        child: usize,
     },
 
     /// An error occurred while operating on a [`Node`](crate::tree::Node).
