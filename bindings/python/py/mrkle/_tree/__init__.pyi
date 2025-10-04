@@ -1,6 +1,6 @@
 """Type stubs for Merkle tree implementations."""
 
-from typing import Final, Iterator, Protocol, Union, Literal, Optional
+from typing import Any, Dict, Final, Iterator, Protocol, Union, Literal, Optional
 from typing_extensions import TypeAlias
 from mrkle.typing import D as _D
 
@@ -28,13 +28,16 @@ class _MrkleTreeBase(Protocol):
     def to_string(self) -> str:
         """Return a string representation of the tree structure."""
         ...
+
     def dumps(
-        self, encoding: Optional[Literal["json", "cbor"]]
+        self, encoding: Optional[Literal["json", "cbor"]], **kwargs: dict[str, Any]
     ) -> Union[str, bytes]: ...
     @staticmethod
     def loads(
         data: Union[str, bytes], encoding: Optional[Literal["json", "cbor"]]
     ) -> "TreeT": ...
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "TreeT": ...
     def __eq__(self, other: object) -> bool: ...
     def __hash__(self) -> int: ...
 
@@ -51,6 +54,7 @@ class MrkleTreeBlake2s(_MrkleTreeBase):
 
 class MrkleTreeIterBlake2s(Iterator[NodeT]):
     """Iterator for Blake2s Merkle tree."""
+
     def __iter__(self) -> MrkleTreeIterBlake2s: ...
     def __next__(self) -> NodeT: ...
 
@@ -67,6 +71,7 @@ class MrkleTreeBlake2b(_MrkleTreeBase):
 
 class MrkleTreeIterBlake2b(Iterator[NodeT]):
     """Iterator for Blake2b Merkle tree."""
+
     def __iter__(self) -> MrkleTreeIterBlake2b: ...
     def __next__(self) -> NodeT: ...
 
@@ -83,6 +88,7 @@ class MrkleTreeKeccak224(_MrkleTreeBase):
 
 class MrkleTreeIterKeccak224(Iterator[NodeT]):
     """Iterator for Keccak224 Merkle tree."""
+
     def __iter__(self) -> MrkleTreeIterKeccak224: ...
     def __next__(self) -> NodeT: ...
 
@@ -99,6 +105,7 @@ class MrkleTreeKeccak256(_MrkleTreeBase):
 
 class MrkleTreeIterKeccak256(Iterator[NodeT]):
     """Iterator for Keccak256 Merkle tree."""
+
     def __iter__(self) -> MrkleTreeIterKeccak256: ...
     def __next__(self) -> NodeT: ...
 
@@ -115,6 +122,7 @@ class MrkleTreeKeccak384(_MrkleTreeBase):
 
 class MrkleTreeIterKeccak384(Iterator[NodeT]):
     """Iterator for Keccak384 Merkle tree."""
+
     def __iter__(self) -> MrkleTreeIterKeccak384: ...
     def __next__(self) -> NodeT: ...
 
@@ -131,6 +139,7 @@ class MrkleTreeKeccak512(_MrkleTreeBase):
 
 class MrkleTreeIterKeccak512(Iterator[NodeT]):
     """Iterator for Keccak512 Merkle tree."""
+
     def __iter__(self) -> MrkleTreeIterKeccak512: ...
     def __next__(self) -> NodeT: ...
 
@@ -147,6 +156,7 @@ class MrkleTreeSha1(_MrkleTreeBase):
 
 class MrkleTreeIterSha1(Iterator[NodeT]):
     """Iterator for SHA1 Merkle tree."""
+
     def __iter__(self) -> MrkleTreeIterSha1: ...
     def __next__(self) -> NodeT: ...
 
@@ -163,6 +173,7 @@ class MrkleTreeSha224(_MrkleTreeBase):
 
 class MrkleTreeIterSha224(Iterator[NodeT]):
     """Iterator for SHA224 Merkle tree."""
+
     def __iter__(self) -> MrkleTreeIterSha224: ...
     def __next__(self) -> NodeT: ...
 
@@ -179,6 +190,7 @@ class MrkleTreeSha256(_MrkleTreeBase):
 
 class MrkleTreeIterSha256(Iterator[NodeT]):
     """Iterator for SHA256 Merkle tree."""
+
     def __iter__(self) -> MrkleTreeIterSha256: ...
     def __next__(self) -> NodeT: ...
 
@@ -195,6 +207,7 @@ class MrkleTreeSha384(_MrkleTreeBase):
 
 class MrkleTreeIterSha384(Iterator[NodeT]):
     """Iterator for SHA384 Merkle tree."""
+
     def __iter__(self) -> MrkleTreeIterSha384: ...
     def __next__(self) -> NodeT: ...
 
@@ -211,6 +224,7 @@ class MrkleTreeSha512(_MrkleTreeBase):
 
 class MrkleTreeIterSha512(Iterator[NodeT]):
     """Iterator for SHA512 Merkle tree."""
+
     def __iter__(self) -> MrkleTreeIterSha512: ...
     def __next__(self) -> NodeT: ...
 

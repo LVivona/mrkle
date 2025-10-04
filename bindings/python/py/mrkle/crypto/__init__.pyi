@@ -18,6 +18,7 @@ from mrkle.typing import D as _D
 # SHA-1
 class Sha1:
     """SHA-1 digest class."""
+
     def __init__(self) -> None: ...
     @staticmethod
     def new_with_prefix(data: bytes) -> Sha1: ...
@@ -40,6 +41,7 @@ class Sha1:
 # SHA-2 (224)
 class Sha224:
     """SHA-224 digest class."""
+
     def __init__(self) -> None: ...
     @staticmethod
     def new_with_prefix(data: bytes) -> Sha224: ...
@@ -62,6 +64,7 @@ class Sha224:
 # SHA-2 (256)
 class Sha256:
     """SHA-256 digest class."""
+
     def __init__(self) -> None: ...
     @staticmethod
     def new_with_prefix(data: bytes) -> Sha256: ...
@@ -84,6 +87,7 @@ class Sha256:
 # SHA-2 (384)
 class Sha384:
     """SHA-384 digest class."""
+
     def __init__(self) -> None: ...
     @staticmethod
     def new_with_prefix(data: bytes) -> Sha384: ...
@@ -106,6 +110,7 @@ class Sha384:
 # SHA-2 (512)
 class Sha512:
     """SHA-512 digest class."""
+
     def __init__(self) -> None: ...
     @staticmethod
     def new_with_prefix(data: bytes) -> Sha512: ...
@@ -128,6 +133,7 @@ class Sha512:
 # Keccak (224)
 class Keccak224:
     """Keccak-224 digest class."""
+
     def __init__(self) -> None: ...
     @staticmethod
     def new_with_prefix(data: bytes) -> Keccak224: ...
@@ -150,6 +156,7 @@ class Keccak224:
 # Keccak (256)
 class Keccak256:
     """Keccak-256 digest class."""
+
     def __init__(self) -> None: ...
     @staticmethod
     def new_with_prefix(data: bytes) -> Keccak256: ...
@@ -172,6 +179,7 @@ class Keccak256:
 # Keccak (384)
 class Keccak384:
     """Keccak-384 digest class."""
+
     def __init__(self) -> None: ...
     @staticmethod
     def new_with_prefix(data: bytes) -> Keccak384: ...
@@ -193,6 +201,7 @@ class Keccak384:
 # Keccak (512)
 class Keccak512:
     """Keccak-512 digest class."""
+
     def __init__(self) -> None: ...
     @staticmethod
     def new_with_prefix(data: bytes) -> Keccak512: ...
@@ -215,6 +224,7 @@ class Keccak512:
 # Blake2s
 class Blake2s:
     """BLAKE2s digest class."""
+
     def __init__(self) -> None: ...
     @staticmethod
     def new_with_prefix(data: bytes) -> Blake2s: ...
@@ -237,6 +247,7 @@ class Blake2s:
 # Blake2b
 class Blake2b:
     """BLAKE2b digest class."""
+
     def __init__(self) -> None: ...
     @staticmethod
     def new_with_prefix(data: bytes) -> Blake2b: ...
@@ -300,10 +311,6 @@ def blake2s(data: Optional[bytes] = None) -> Digest:
     """Create a BLAKE2s hash object."""
     ...
 
-@overload
-def new(name: str) -> Digest: ...
-@overload
-def new(name: str, *, data: Optional[bytes] = None) -> Digest: ...
 def new(name: str, *, data: Optional[bytes] = None) -> Digest:
     """Create a new digest object by algorithm name.
 
