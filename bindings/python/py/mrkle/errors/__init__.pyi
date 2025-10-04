@@ -31,21 +31,6 @@ class ProofError(MerkleError):
 
     pass
 
-class HashError(MerkleError):
-    """
-    Exception raised when hash computation fails.
-
-    # Example
-    ```python
-    try:
-         pass
-    except mrkle.HashError as e:
-        print(f"Hash operation failed: {e}")
-    ```
-    """
-
-    pass
-
 class SerdeError(MerkleError):
     """
     Exception raised when serialization/deserialization operations fail.

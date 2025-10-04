@@ -5,7 +5,6 @@ __all__ = [
     "ProofError",
     "TreeError",
     "NodeError",
-    "HashError",
     "SerdeError",
 ]
 
@@ -13,5 +12,4 @@ MerkleError = errors.MerkleError
 ProofError = errors.ProofError
 TreeError = errors.TreeError
 NodeError = errors.NodeError
-HashError = errors.HashError
 SerdeError = errors.SerdeError

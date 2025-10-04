@@ -69,22 +69,6 @@ pyo3::create_exception!(
     "Exception raised when Merkle tree node operations fail."
 );
 
-// Exception raised when hash computation fails.
-//
-// # Example
-// ```python
-// try:
-//      pass
-// except mrkle.HashError as e:
-//     print(f"Hash operation failed: {e}")
-// ```
-pyo3::create_exception!(
-    mrkle,
-    PyHashError,
-    PyMerkleError,
-    "Exception raised when hash computation fails."
-);
-
 // Exception raised when serialization/deserialization operations fail.
 //
 // # Example
@@ -119,7 +103,6 @@ pub(crate) fn register_exceptions(m: &Bound<'_, PyModule>) -> PyResult<()> {
     exce_m.add("ProofError", exce_m.py().get_type::<PyProofError>())?;
     exce_m.add("TreeError", exce_m.py().get_type::<PyTreeError>())?;
     exce_m.add("NodeError", exce_m.py().get_type::<PyNodeError>())?;
-    exce_m.add("HashError", exce_m.py().get_type::<PyHashError>())?;
     exce_m.add("SerdeError", exce_m.py().get_type::<PySerdeError>())?;
 
     m.add_submodule(&exce_m)

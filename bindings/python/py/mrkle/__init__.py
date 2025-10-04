@@ -14,6 +14,7 @@ from . import node
 
 from .node import MrkleNode
 from .tree import MrkleTree, MrkleProof
+from .iter import MrkleTreeIter
 
 from .errors import (
     MerkleError,
@@ -24,6 +25,7 @@ from .errors import (
     ProofError,
 )
 
+
 __all__ = [
     "__version__",
     "crypto",
@@ -32,6 +34,7 @@ __all__ = [
     "MrkleNode",
     "MrkleTree",
     "MrkleProof",
+    "MrkleTreeIter",
     "MerkleError",
     "TreeError",
     "HashError",
