@@ -19,7 +19,6 @@ from .iter import MrkleTreeIter
 from .errors import (
     MerkleError,
     TreeError,
-    HashError,
     SerdeError,
     NodeError,
     ProofError,
