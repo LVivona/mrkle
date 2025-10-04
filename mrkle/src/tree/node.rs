@@ -1,4 +1,5 @@
 #![allow(dead_code)]
+#![allow(unused_variables)]
 use crate::NodeError;
 use crate::prelude::*;
 
@@ -283,7 +284,7 @@ impl<Ix: IndexType> From<NodeIndex<Ix>> for usize {
 /// the read-only operations provided by the [`Node`] trait.
 pub trait MutNode<Ix: IndexType = DefaultIx>: Node<Ix> {
     /// Sets the parent index within in node.
-    fn set_parent(&mut self, parent: NodeIndex<Ix>) {
+    fn set_parent(&mut self, _parent: NodeIndex<Ix>) {
         unimplemented!()
     }
 
@@ -296,12 +297,12 @@ pub trait MutNode<Ix: IndexType = DefaultIx>: Node<Ix> {
     ///
     /// # Panics
     /// Panics if [`Node`] already exsit within list.
-    fn push(&mut self, child: NodeIndex<Ix>) {
+    fn push(&mut self, _child: NodeIndex<Ix>) {
         unimplemented!()
     }
 
     /// Tries to add a child, returning an error if the operation is invalid.
-    fn try_push(&mut self, child: NodeIndex<Ix>) -> Result<(), NodeError> {
+    fn try_push(&mut self, _child: NodeIndex<Ix>) -> Result<(), NodeError> {
         unimplemented!()
     }
 
@@ -314,7 +315,7 @@ pub trait MutNode<Ix: IndexType = DefaultIx>: Node<Ix> {
     ///
     /// # Panics
     /// Panics if `index > len`.
-    fn insert(&mut self, index: usize, child: NodeIndex<Ix>) {
+    fn insert(&mut self, _index: usize, _child: NodeIndex<Ix>) {
         unimplemented!()
     }
 
@@ -322,13 +323,13 @@ pub trait MutNode<Ix: IndexType = DefaultIx>: Node<Ix> {
     ///
     /// # Panics
     /// Panics if `index >= len`.
-    fn remove(&mut self, index: usize) -> NodeIndex<Ix> {
+    fn remove(&mut self, _index: usize) -> NodeIndex<Ix> {
         unimplemented!()
     }
 
     /// Removes the first occurrence of the specified child.
     /// Returns `true` if the child was found and removed.
-    fn remove_item(&mut self, child: NodeIndex<Ix>) -> bool {
+    fn remove_item(&mut self, _child: NodeIndex<Ix>) -> bool {
         unimplemented!()
     }
 
@@ -338,7 +339,7 @@ pub trait MutNode<Ix: IndexType = DefaultIx>: Node<Ix> {
     }
 
     /// Retains only the children specified by the predicate.
-    fn retain<F>(&mut self, f: F)
+    fn retain<F>(&mut self, _f: F)
     where
         F: FnMut(&NodeIndex<Ix>) -> bool,
     {
@@ -349,7 +350,7 @@ pub trait MutNode<Ix: IndexType = DefaultIx>: Node<Ix> {
     ///
     /// # Panics
     /// Panics if either index is out of bounds.
-    fn swap(&mut self, a: usize, b: usize) {
+    fn swap(&mut self, _a: usize, _b: usize) {
         unimplemented!()
     }
 

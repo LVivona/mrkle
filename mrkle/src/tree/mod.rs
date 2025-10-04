@@ -38,7 +38,7 @@ pub struct Tree<N: Node<Ix>, Ix: IndexType = DefaultIx> {
 impl<N: Node<Ix> + Clone, Ix: IndexType> Clone for Tree<N, Ix> {
     fn clone(&self) -> Self {
         Self {
-            root: self.root.clone(),
+            root: self.root,
             nodes: self.nodes.clone(),
         }
     }
@@ -86,7 +86,7 @@ impl<N: Node<Ix>, Ix: IndexType> Tree<N, Ix> {
     /// Retrun the starting index.
     #[inline]
     pub fn start(&self) -> Option<NodeIndex<Ix>> {
-        self.root.clone()
+        self.root
     }
 
     /// Returns a reference to the root node.

@@ -342,7 +342,7 @@ impl<T, D: Digest, Ix: IndexType> MrkleNode<T, D, Ix> {
                             child: idx.index(),
                         }));
                     }
-                    hasher.update(&node.hash());
+                    hasher.update(node.hash());
                     Ok(())
                 } else {
                     Err(TreeError::from(NodeError::NodeNotFound {
@@ -350,7 +350,7 @@ impl<T, D: Digest, Ix: IndexType> MrkleNode<T, D, Ix> {
                     }))
                 }
             })
-            .map_err(|e| MrkleError::from(e))?;
+            .map_err(MrkleError::from)?;
 
         let hash = hasher.finalize();
 

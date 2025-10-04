@@ -447,7 +447,7 @@ pub struct MrkleProof<D: Digest, Ix: IndexType = DefaultIx> {
 impl<D: Digest, Ix: IndexType> MrkleProof<D, Ix> {
     /// Construct unconstructed proof from [`Tree`].
     pub fn new(proof: Tree<MrkleProofNode<D, Ix>, Ix>, expected: GenericArray<D>) -> Self {
-        let leaves = proof.find_all(|node| node.hash == None && node.is_leaf());
+        let leaves = proof.find_all(|node| node.hash.is_none() && node.is_leaf());
 
         assert!(
             !leaves.is_empty(),
@@ -698,9 +698,16 @@ impl<D: Digest, Ix: IndexType> MrkleProof<D, Ix> {
         entry::from_bytes(&self.expected)
     }
 
+    #[inline]
     /// Returns the number of nodes currently in the tree.
     pub fn len(&self) -> usize {
         self.core.len()
+    }
+
+    #[inline]
+    /// Returns true if the tree contains no nodes.
+    pub fn is_empty(&self) -> bool {
+        self.core.is_empty()
     }
 
     /// Returns leaf [`MrkleProofNode`] within the Tree.
