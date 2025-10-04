@@ -7,6 +7,8 @@ use pyo3::pycell::PyRef;
 use pyo3::types::{PyBytes, PyDict, PyType};
 use pyo3::Bound as PyBound;
 
+use crypto::digest::Digest;
+
 use crate::{
     codec::Codec,
     crypto::{
@@ -14,8 +16,17 @@ use crate::{
         PyKeccak384Wrapper, PyKeccak512Wrapper, PySha1Wrapper, PySha224Wrapper, PySha256Wrapper,
         PySha384Wrapper, PySha512Wrapper,
     },
+    errors::{NodeError as PyNodeError, SerdeError},
 };
-use mrkle::{GenericArray, Hasher, Iter, MrkleHasher, MrkleNode, Node, NodeIndex, Tree};
+
+use mrkle::error::NodeError;
+use mrkle::{GenericArray, IndexType, Iter, MrkleNode, MutNode, Node, NodeIndex, Tree};
+
+trait PyMrkleNode<D: Digest, Ix: IndexType>: Node<Ix> + MutNode<Ix> + Sized {
+    fn hash(&self) -> &GenericArray<D>;
+    fn leaf(data: impl AsRef<[u8]>) -> Self;
+    fn internal(tree: &Tree<Self, Ix>, children: Vec<NodeIndex<Ix>>) -> Result<Self, NodeError>;
+}
 
 macro_rules! py_mrkle_node {
     ($name:ident, $digest:ty, $classname:literal) => {
@@ -37,16 +48,38 @@ macro_rules! py_mrkle_node {
 
         impl Eq for $name {}
 
-        impl $name {
-            #[inline]
-            pub fn hash(&self) -> &GenericArray<$digest> {
-                self.inner.hash()
+        impl MutNode<usize> for $name {
+            fn set_parent(&mut self, parent: NodeIndex<usize>) {
+                self.parent = Some(parent);
             }
+        }
 
-            pub fn internal(children: Vec<NodeIndex<usize>>, hash: GenericArray<$digest>) -> Self {
-                Self {
-                    inner: MrkleNode::<Box<[u8]>, $digest, usize>::internal(children, hash),
-                }
+        impl $name {
+            pub(crate) fn internal(
+                tree: &Tree<$name, usize>,
+                children: Vec<NodeIndex<usize>>,
+            ) -> Result<Self, NodeError> {
+                let mut hasher = <$digest>::new();
+                children.iter().try_for_each(|&idx| {
+                    if let Some(node) = tree.get(idx.index()) {
+                        if node.parent().is_some() {
+                            return Err(NodeError::ParentConflict {
+                                parent: node.parent().unwrap().index(),
+                                child: idx.index(),
+                            });
+                        }
+                        hasher.update(&node.hash());
+                        Ok(())
+                    } else {
+                        Err(NodeError::NodeNotFound { index: idx.index() })
+                    }
+                })?;
+
+                let hash = hasher.finalize();
+
+                Ok(Self {
+                    inner: MrkleNode::internal_with_hash(hash, children),
+                })
             }
         }
 
@@ -57,6 +90,25 @@ macro_rules! py_mrkle_node {
 
             fn parent(&self) -> Option<NodeIndex<usize>> {
                 self.inner.parent()
+            }
+        }
+
+        impl PyMrkleNode<$digest, usize> for $name {
+            fn hash(&self) -> &GenericArray<$digest> {
+                self.inner.hash()
+            }
+
+            fn leaf(data: impl AsRef<[u8]>) -> Self {
+                Self {
+                    inner: MrkleNode::<Box<[u8]>, $digest, usize>::leaf(data.as_ref().into()),
+                }
+            }
+
+            fn internal(
+                tree: &Tree<$name, usize>,
+                children: Vec<NodeIndex<usize>>,
+            ) -> Result<Self, NodeError> {
+                Ok(<$name>::internal(tree, children)?)
             }
         }
 
@@ -94,6 +146,7 @@ macro_rules! py_mrkle_node {
             ) -> Self {
                 let bytes: Box<[u8]> = payload.as_bytes().to_vec().into_boxed_slice();
                 let value = GenericArray::<$digest>::clone_from_slice(&hash.as_bytes());
+
                 Self {
                     inner: MrkleNode::<Box<[u8]>, $digest, usize>::leaf_with_hash(bytes, value),
                 }
@@ -312,6 +365,17 @@ macro_rules! py_mrkle_tree {
 
             #[inline]
             #[classmethod]
+            #[pyo3(text_signature = "(cls, data : Dict[str, bytes])")]
+            pub fn from_dict(_cls: &PyBound<'_, PyType>, data : PyBound<'_, PyDict>) -> PyResult<Self> {
+                let mut inner = Tree::new();
+
+                traverse_dict_depth(data, &mut inner)?;
+
+                Ok(Self { inner })
+            }
+
+            #[inline]
+            #[classmethod]
             pub fn from_leaves(
                 _cls: &PyBound<'_, PyType>,
                 mut leaves: Vec<PyBound<'_, PyBytes>>,
@@ -322,17 +386,15 @@ macro_rules! py_mrkle_tree {
                     return Ok(Self { inner: tree });
                 }
 
-                let hasher = MrkleHasher::<$digest>::new();
-
                 if leaves.len() == 1 {
                     let payload = leaves.pop().unwrap();
 
                     let leaf = <$node>::leaf(payload);
-                    let hash = hasher.hash(leaf.hash());
 
                     let leaf_idx = tree.push(leaf);
 
-                    let root = <$node>::internal(vec![leaf_idx], hash);
+
+                    let root = <$node>::internal(&tree, vec![leaf_idx]).map_err(|e| PyNodeError::new_err(format!("{e}")))?;
                     let root_idx = tree.push(root);
                     tree[leaf_idx].parent = Some(root_idx);
                     tree.set_root(Some(root_idx));
@@ -352,9 +414,8 @@ macro_rules! py_mrkle_tree {
                     let lhs = queue.pop_front().unwrap();
                     let rhs = queue.pop_front().unwrap();
 
-                    let hash = hasher.concat(&tree[lhs].hash(), &tree[rhs].hash());
 
-                    let parent_idx = tree.push(<$node>::internal(vec![lhs, rhs], hash));
+                    let parent_idx = tree.push(<$node>::internal(&tree, vec![lhs, rhs]).map_err(|e| PyNodeError::new_err(format!("{e}")))?);
 
                     tree[lhs].parent = Some(parent_idx);
                     tree[rhs].parent = Some(parent_idx);
@@ -365,6 +426,7 @@ macro_rules! py_mrkle_tree {
                 tree.set_root(queue.pop_front());
                 Ok(Self { inner: tree })
             }
+
 
             fn __iter__(slf: PyRef<'_, Self>) -> PyResult<$iter_name> {
                 let mut queue = std::collections::VecDeque::new();
@@ -395,7 +457,7 @@ macro_rules! py_mrkle_tree {
                 format!("{}", self.inner)
             }
 
-            #[pyo3(text_signature = "(encoding, **kwargs)")]
+            #[pyo3(text_signature = "(encoding : Optional[Literal['json', 'codec']] = None, **kwargs)")]
             fn dumps<'py>(
                 &self,
                 py: Python<'py>,
@@ -405,13 +467,13 @@ macro_rules! py_mrkle_tree {
                 match encoding {
                     Some(Codec::JSON) => {
                         let json_str = serde_json::to_string(&self).map_err(|e| {
-                            PyValueError::new_err(format!("JSON serialization error: {}", e))
+                            SerdeError::new_err(format!("JSON serialization error: {}", e))
                         })?;
                         Ok(json_str.into_pyobject(py)?.into_any())
                     }
                     Some(Codec::CBOR) | None => {
                         let bytes = serde_cbor::to_vec(&self).map_err(|e| {
-                            PyValueError::new_err(format!("CBOR serialization error: {}", e))
+                            SerdeError::new_err(format!("CBOR serialization error: {}", e))
                         })?;
                         Ok(pyo3::types::PyBytes::new(py, &bytes).into_any())
                     }
@@ -419,31 +481,24 @@ macro_rules! py_mrkle_tree {
             }
 
             #[staticmethod]
-            #[pyo3(text_signature = "(data, encoding, **kwargs)")]
+            #[pyo3(text_signature = "(data : bytes, encoding : Optional[Literal['json', 'codec']] = None, **kwargs)")]
             fn loads(
                 data: &Bound<'_, PyAny>,
                 encoding: Option<Codec>,
                 _kwargs: PyBound<'_, PyDict>,
             ) -> PyResult<Self> {
+                let bytes = data.extract::<&[u8]>()?;
+
                 match encoding {
-                    Some(Codec::JSON) => {
-                        let json_str = data.extract::<String>().map_err(|_| {
-                            PyValueError::new_err("Expected string for JSON encoding")
-                        })?;
-                        serde_json::from_str(&json_str).map_err(|e| {
-                            PyValueError::new_err(format!("JSON deserialization error: {}", e))
-                        })
-                    }
-                    Some(Codec::CBOR) | None => {
-                        let bytes = data.extract::<&[u8]>().map_err(|_| {
-                            PyValueError::new_err("Expected bytes for CBOR encoding")
-                        })?;
-                        serde_cbor::from_slice(bytes).map_err(|e| {
-                            PyValueError::new_err(format!("CBOR deserialization error: {}", e))
-                        })
-                    }
+                    Some(Codec::JSON) => serde_json::from_slice(&bytes).map_err(|e| {
+                        SerdeError::new_err(format!("JSON deserialization error: {}", e))
+                    }),
+                    Some(Codec::CBOR) | None => serde_cbor::from_slice(bytes).map_err(|e| {
+                        SerdeError::new_err(format!("CBOR deserialization error: {}", e))
+                    }),
                 }
             }
+
         }
 
         impl $name {
@@ -605,6 +660,65 @@ py_mrkle_tree!(
     "MrkleTreeKeccak512",
     "MrkleTreeIterKeccak512"
 );
+
+fn traverse_dict_depth<N: PyMrkleNode<D, usize>, D: Digest>(
+    dict: PyBound<'_, PyDict>,
+    tree: &mut Tree<N, usize>,
+) -> PyResult<()> {
+    if dict.len() != 1 {
+        return Err(PyValueError::new_err(
+            "The dictionary can not contain more than one root.",
+        ));
+    }
+
+    let root: Vec<_> = dict.items().iter().collect();
+
+    if let Ok((_, value)) = root[0].extract::<(Bound<PyAny>, Bound<PyAny>)>() {
+        let root = process_traversal(&value, tree)?;
+        tree.set_root(Some(root));
+        Ok(())
+    } else {
+        Err(PyValueError::new_err(format!(
+            "Invalid value type for: expected dict or bytes",
+        )))
+    }
+}
+
+fn process_traversal<N: PyMrkleNode<D, usize>, D: Digest>(
+    value: &Bound<'_, PyAny>,
+    tree: &mut Tree<N, usize>,
+) -> PyResult<NodeIndex<usize>> {
+    // If leaf return leaf node
+    if let Ok(child) = value.extract::<PyBound<PyBytes>>() {
+        let leaf = N::leaf(child.as_bytes());
+        let index = tree.push(leaf);
+        return Ok(index);
+    };
+
+    if let Ok(child_dict) = value.downcast::<PyDict>() {
+        let mut indices: Vec<NodeIndex<usize>> = Vec::new();
+
+        // Process all children
+        for (_, child) in child_dict.iter() {
+            let child_id: NodeIndex<usize> = process_traversal(&child, tree)?;
+            indices.push(child_id);
+        }
+
+        // Create internal node from children
+        let node_id = tree
+            .push(N::internal(tree, indices).map_err(|e| PyNodeError::new_err(format!("{e}")))?);
+
+        for child in tree[node_id].children() {
+            tree[child.index()].set_parent(node_id);
+        }
+
+        return Ok(node_id);
+    }
+
+    Err(PyValueError::new_err(format!(
+        "Invalid value type for: expected dict or bytes",
+    )))
+}
 
 /// Register MerkleTree data structure.
 ///

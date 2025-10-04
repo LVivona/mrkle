@@ -16,7 +16,7 @@ use pyo3::prelude::*;
 // ```
 pyo3::create_exception!(
     mrkle,
-    PyMerkleError,
+    MerkleError,
     PyException,
     "Base exception error, encapsulating all Merkle tree operations."
 );
@@ -32,8 +32,8 @@ pyo3::create_exception!(
 // ```
 pyo3::create_exception!(
     mrkle,
-    PyProofError,
-    PyMerkleError,
+    ProofError,
+    MerkleError,
     "Exception raised when Merkle proof operations fail."
 );
 
@@ -48,8 +48,8 @@ pyo3::create_exception!(
 // ```
 pyo3::create_exception!(
     mrkle,
-    PyTreeError,
-    PyMerkleError,
+    TreeError,
+    MerkleError,
     "Exception raised when Merkle tree operations fail."
 );
 
@@ -64,8 +64,8 @@ pyo3::create_exception!(
 // ```
 pyo3::create_exception!(
     mrkle,
-    PyNodeError,
-    PyTreeError,
+    NodeError,
+    TreeError,
     "Exception raised when Merkle tree node operations fail."
 );
 
@@ -80,8 +80,8 @@ pyo3::create_exception!(
 // ```
 pyo3::create_exception!(
     mrkle,
-    PySerdeError,
-    PyMerkleError,
+    SerdeError,
+    MerkleError,
     "Exception raised when serialization/deserialization operations fail."
 );
 
@@ -99,11 +99,11 @@ pyo3::create_exception!(
 pub(crate) fn register_exceptions(m: &Bound<'_, PyModule>) -> PyResult<()> {
     let exce_m = PyModule::new(m.py(), "errors")?;
 
-    exce_m.add("MerkleError", m.py().get_type::<PyMerkleError>())?;
-    exce_m.add("ProofError", exce_m.py().get_type::<PyProofError>())?;
-    exce_m.add("TreeError", exce_m.py().get_type::<PyTreeError>())?;
-    exce_m.add("NodeError", exce_m.py().get_type::<PyNodeError>())?;
-    exce_m.add("SerdeError", exce_m.py().get_type::<PySerdeError>())?;
+    exce_m.add("MerkleError", m.py().get_type::<MerkleError>())?;
+    exce_m.add("ProofError", exce_m.py().get_type::<ProofError>())?;
+    exce_m.add("TreeError", exce_m.py().get_type::<TreeError>())?;
+    exce_m.add("NodeError", exce_m.py().get_type::<NodeError>())?;
+    exce_m.add("SerdeError", exce_m.py().get_type::<SerdeError>())?;
 
     m.add_submodule(&exce_m)
 }

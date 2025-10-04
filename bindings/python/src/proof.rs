@@ -18,7 +18,7 @@ use crate::{
         PyKeccak384Wrapper, PyKeccak512Wrapper, PySha1Wrapper, PySha224Wrapper, PySha256Wrapper,
         PySha384Wrapper, PySha512Wrapper,
     },
-    errors::PyProofError,
+    errors::ProofError as PyProofError,
     tree::{
         PyMrkleNode_Blake2b, PyMrkleNode_Blake2s, PyMrkleNode_Keccak224, PyMrkleNode_Keccak256,
         PyMrkleNode_Keccak384, PyMrkleNode_Keccak512, PyMrkleNode_Sha1, PyMrkleNode_Sha224,
@@ -94,10 +94,9 @@ macro_rules! py_mrkle_proof {
                     // Get the _inner attribute
                     let inner_attr = tree.getattr(intern!(py, "_inner"))?;
 
-                    // Extract the tree - fixed: removed Some() wrapper
+                    // Extract the tree
                     let internal_tree = inner_attr.extract::<$tree>()?;
 
-                    // Fixed: Check if leaves is empty, not > 1
                     if leaves.is_empty() {
                         return Err(PyValueError::new_err(
                             "Must provide at least one leaf index",
@@ -113,6 +112,63 @@ macro_rules! py_mrkle_proof {
 
                     Ok(proof)
                 })
+            }
+
+            fn update(&mut self, leaves: PyBound<'_, PyAny>) -> PyResult<()> {
+                // Case 1: single bytes
+                if let Ok(leaf) = leaves.extract::<&[u8]>() {
+                    self.inner
+                        .update_leaf_hash(0, GenericArray::<$digest>::clone_from_slice(leaf))
+                        .map_err(|e| PyProofError::new_err(format!("{e}")))?;
+                    return Ok(());
+                }
+
+                // Case 2: list of bytes
+                if let Ok(multi) = leaves.extract::<Vec<Vec<u8>>>() {
+                    for (idx, bytes) in multi.iter().enumerate() {
+                        self.inner
+                            .update_leaf_hash(idx, GenericArray::<$digest>::clone_from_slice(bytes))
+                            .map_err(|e| PyProofError::new_err(format!("{e}")))?;
+                    }
+                    return Ok(());
+                }
+
+                // Case 3: hex string
+                if let Ok(hex_str) = leaves.extract::<String>() {
+                    let bytes = hex::decode(hex_str)
+                        .map_err(|e| PyValueError::new_err(format!("{e}")))?;
+
+                    self.inner
+                        .update_leaf_hash(0, GenericArray::<$digest>::clone_from_slice(&bytes))
+                        .map_err(|e| PyProofError::new_err(format!("{e}")))?;
+                    return Ok(());
+                }
+
+                // Case 4: list of hex strings
+                if let Ok(multi_hex) = leaves.extract::<Vec<String>>() {
+                    for (idx, hex_str) in multi_hex.iter().enumerate() {
+                        let bytes = hex::decode(hex_str)
+                            .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("Invalid hex at index {idx}: {e}")))?;
+
+                        self.inner
+                            .update_leaf_hash(idx, GenericArray::<$digest>::clone_from_slice(&bytes))
+                            .map_err(|e| PyProofError::new_err(format!("{e}")))?;
+                    }
+                    return Ok(());
+                }
+
+                Err(PyErr::new::<pyo3::exceptions::PyTypeError, _>(
+                    "Expected bytes, list[bytes], hex string, or list[str] of hex string",
+                ))
+            }
+
+
+            fn validate(&mut self) -> PyResult<bool> {
+                self.inner.try_validate_basic().map_err(|e| PyProofError::new_err(format!("{e}")))
+            }
+
+            fn refresh(&mut self) {
+                self.inner.refresh()
             }
 
             #[staticmethod]
@@ -160,29 +216,21 @@ macro_rules! py_mrkle_proof {
             }
 
             #[staticmethod]
-            #[pyo3(text_signature = "(data, encoding, **kwargs)")]
+            #[pyo3(text_signature = "(data : bytes, encoding : Optional[Literal['json', 'codec']] = None, **kwargs)")]
             fn loads(
                 data: &PyBound<'_, PyAny>,
                 encoding: Option<Codec>,
                 _kwargs: PyBound<'_, PyDict>,
             ) -> PyResult<Self> {
+                let bytes = data.extract::<&[u8]>()?;
+
                 match encoding {
-                    Some(Codec::JSON) => {
-                        let json_str = data.extract::<String>().map_err(|_| {
-                            PyValueError::new_err("Expected string for JSON encoding")
-                        })?;
-                        serde_json::from_str(&json_str).map_err(|e| {
-                            PyValueError::new_err(format!("JSON deserialization error: {}", e))
-                        })
-                    }
-                    Some(Codec::CBOR) | None => {
-                        let bytes = data.extract::<&[u8]>().map_err(|_| {
-                            PyValueError::new_err("Expected bytes for CBOR encoding")
-                        })?;
-                        serde_cbor::from_slice(bytes).map_err(|e| {
-                            PyValueError::new_err(format!("CBOR deserialization error: {}", e))
-                        })
-                    }
+                    Some(Codec::JSON) => serde_json::from_slice(&bytes).map_err(|e| {
+                        PyValueError::new_err(format!("JSON deserialization error: {}", e))
+                    }),
+                    Some(Codec::CBOR) | None => serde_cbor::from_slice(bytes).map_err(|e| {
+                        PyValueError::new_err(format!("CBOR deserialization error: {}", e))
+                    }),
                 }
             }
         }
