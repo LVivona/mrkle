@@ -1,9 +1,7 @@
 import sys
-from typing import runtime_checkable, Protocol, TypeVar, Union, Literal
+from typing import runtime_checkable, Protocol, TypeVar, Literal
 from typing_extensions import TypeAlias
 from mrkle.crypto.typing import Digest
-
-from mrkle._mrkle_rs import tree
 
 if sys.version_info >= (3, 12):
     # Buffer protocol is available in Python 3.12+
