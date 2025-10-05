@@ -1,8 +1,7 @@
-use std::sync::OnceLock;
-
 use pyo3::intern;
 use pyo3::prelude::*;
 use pyo3::sync::OnceLockExt;
+
 use pyo3::Bound as PyBound;
 
 use pyo3::exceptions::PyValueError;
@@ -27,9 +26,8 @@ use crate::{
         PyMrkleTreeKeccak512, PyMrkleTreeSha1, PyMrkleTreeSha224, PyMrkleTreeSha256,
         PyMrkleTreeSha384, PyMrkleTreeSha512,
     },
+    MRKLE_MODULE,
 };
-
-static MRKLE_MODULE: OnceLock<Py<PyModule>> = OnceLock::new();
 
 macro_rules! py_mrkle_proof {
     ($name:ident, $digest:ty, $tree:ty, $node:ty, $classname:literal) => {
@@ -81,7 +79,6 @@ macro_rules! py_mrkle_proof {
                 leaves: Vec<usize>,
             ) -> PyResult<Self> {
                 Python::with_gil(|py| {
-                    // Fixed: Changed "torch" to "mrkle"
                     let module = PyModule::import(py, intern!(py, "mrkle"))?;
                     MRKLE_MODULE.get_or_init_py_attached(py, || module.clone().unbind());
 
@@ -115,6 +112,8 @@ macro_rules! py_mrkle_proof {
             }
 
             fn update(&mut self, leaves: PyBound<'_, PyAny>) -> PyResult<()> {
+                // NOTE: update the MerkleTree leaf
+
                 // Case 1: single bytes
                 if let Ok(leaf) = leaves.extract::<&[u8]>() {
                     self.inner

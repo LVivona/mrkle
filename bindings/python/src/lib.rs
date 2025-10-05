@@ -1,3 +1,5 @@
+use std::sync::OnceLock;
+
 use pyo3::prelude::*;
 
 use crate::crypto::register_crypto;
@@ -12,6 +14,8 @@ pub mod tree;
 
 pub mod codec;
 pub mod utils;
+
+static MRKLE_MODULE: OnceLock<Py<PyModule>> = OnceLock::new();
 
 /// A Python module implemented in Rust.
 #[pymodule]
