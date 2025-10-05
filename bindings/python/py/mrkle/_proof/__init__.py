@@ -1,6 +1,6 @@
 from mrkle._mrkle_rs import proof
 
-from collections import Mapping
+from collections.abc import Mapping
 from types import MappingProxyType
 from typing import Union, Final
 
