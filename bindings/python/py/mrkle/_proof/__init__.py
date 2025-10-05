@@ -17,7 +17,7 @@ __all__ = [
     "MrkleProofBlake2b",
     "MrkleProofBlake2s",
     "PROOF_MAP",
-    "ProofT",
+    "Proof_T",
 ]
 
 MrkleProofSha1 = proof.MrkleProofSha1
@@ -37,7 +37,7 @@ MrkleProofBlake2b = proof.MrkleProofBlake2b
 MrkleProofBlake2s = proof.MrkleProofBlake2s
 
 
-ProofT = type[
+Proof_T = type[
     Union[
         MrkleProofBlake2s,
         MrkleProofBlake2b,
@@ -53,7 +53,7 @@ ProofT = type[
     ]
 ]
 
-PROOF_MAP: Final[Mapping[str, type[ProofT]]] = MappingProxyType(
+PROOF_MAP: Final[Mapping[str, Proof_T]] = MappingProxyType(
     {
         "blake2s": MrkleProofBlake2s,
         "blake2b": MrkleProofBlake2b,

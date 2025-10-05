@@ -33,10 +33,11 @@ __all__ = [
     "MrkleTreeIterSha512",
     "TREE_MAP",
     "NODE_MAP",
-    "NodeT",
-    "TreeT",
-    "IterableT",
+    "Node_T",
+    "Tree_T",
+    "Iterable_T",
 ]
+
 
 MrkleTreeBlake2s = tree.MrkleTreeBlake2s
 MrkleTreeBlake2b = tree.MrkleTreeBlake2b
@@ -75,7 +76,7 @@ MrkleTreeIterSha256 = tree.MrkleTreeIterSha256
 MrkleTreeIterSha384 = tree.MrkleTreeIterSha384
 MrkleTreeIterSha512 = tree.MrkleTreeIterSha512
 
-NodeT = type[
+Node_T = type[
     Union[
         MrkleNodeBlake2s,
         MrkleNodeBlake2b,
@@ -91,7 +92,7 @@ NodeT = type[
     ]
 ]
 
-TreeT = type[
+Tree_T = type[
     Union[
         MrkleTreeBlake2s,
         MrkleTreeBlake2b,
@@ -107,7 +108,7 @@ TreeT = type[
     ]
 ]
 
-IterableT = type[
+Iterable_T = type[
     Union[
         MrkleTreeIterBlake2s,
         MrkleTreeIterBlake2b,
@@ -124,7 +125,7 @@ IterableT = type[
 ]
 
 
-TREE_MAP: Final[Mapping[str, TreeT]] = MappingProxyType(
+TREE_MAP: Final[Mapping[str, Tree_T]] = MappingProxyType(
     {
         "blake2s": MrkleTreeBlake2s,
         "blake2b": MrkleTreeBlake2b,
@@ -143,7 +144,7 @@ TREE_MAP: Final[Mapping[str, TreeT]] = MappingProxyType(
 )
 
 
-NODE_MAP: Final[Mapping[str, NodeT]] = MappingProxyType(
+NODE_MAP: Final[Mapping[str, Node_T]] = MappingProxyType(
     {
         "blake2s": MrkleNodeBlake2s,
         "blake2b": MrkleNodeBlake2b,

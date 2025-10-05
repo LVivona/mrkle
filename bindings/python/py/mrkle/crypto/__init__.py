@@ -16,6 +16,7 @@ from typing import Optional, Final
 from mrkle._mrkle_rs import crypto
 from mrkle.crypto.typing import Digest
 
+Digest_T = type[Digest]
 
 __all__ = [
     "new",
@@ -42,6 +43,7 @@ __all__ = [
     "blake2b",
     "blake2s",
     "Digest",
+    "Digest_T",
 ]
 
 
@@ -65,7 +67,7 @@ Blake2s = crypto.blake2s256
 Blake2b = crypto.blake2b512
 
 # READ-ONLY ACCESS
-_algorithms_map: Final[Mapping[str, type[Digest]]] = MappingProxyType(
+_algorithms_map: Final[Mapping[str, Digest_T]] = MappingProxyType(
     {
         "blake2s": Blake2s,
         "blake2b": Blake2b,
