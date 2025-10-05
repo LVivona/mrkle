@@ -1,6 +1,7 @@
 use std::sync::OnceLock;
 
 use pyo3::prelude::*;
+use pyo3::Bound as PyBound;
 
 use crate::crypto::register_crypto;
 use crate::errors::register_exceptions;
@@ -19,7 +20,7 @@ static MRKLE_MODULE: OnceLock<Py<PyModule>> = OnceLock::new();
 
 /// A Python module implemented in Rust.
 #[pymodule]
-fn _mrkle_rs(m: &Bound<'_, PyModule>) -> PyResult<()> {
+fn _mrkle_rs(m: &PyBound<'_, PyModule>) -> PyResult<()> {
     register_exceptions(m)?;
     register_crypto(m)?;
     register_tree(m)?;

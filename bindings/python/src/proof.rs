@@ -17,7 +17,7 @@ use crate::{
         PyKeccak384Wrapper, PyKeccak512Wrapper, PySha1Wrapper, PySha224Wrapper, PySha256Wrapper,
         PySha384Wrapper, PySha512Wrapper,
     },
-    errors::ProofError as PyProofError,
+    errors::{ProofError as PyProofError, SerdeError},
     tree::{
         PyMrkleNode_Blake2b, PyMrkleNode_Blake2s, PyMrkleNode_Keccak224, PyMrkleNode_Keccak256,
         PyMrkleNode_Keccak384, PyMrkleNode_Keccak512, PyMrkleNode_Sha1, PyMrkleNode_Sha224,
@@ -112,9 +112,6 @@ macro_rules! py_mrkle_proof {
             }
 
             fn update(&mut self, leaves: PyBound<'_, PyAny>) -> PyResult<()> {
-                // NOTE: update the MerkleTree leaf
-
-                // Case 1: single bytes
                 if let Ok(leaf) = leaves.extract::<&[u8]>() {
                     self.inner
                         .update_leaf_hash(0, GenericArray::<$digest>::clone_from_slice(leaf))
@@ -122,7 +119,6 @@ macro_rules! py_mrkle_proof {
                     return Ok(());
                 }
 
-                // Case 2: list of bytes
                 if let Ok(multi) = leaves.extract::<Vec<Vec<u8>>>() {
                     for (idx, bytes) in multi.iter().enumerate() {
                         self.inner
@@ -132,7 +128,6 @@ macro_rules! py_mrkle_proof {
                     return Ok(());
                 }
 
-                // Case 3: hex string
                 if let Ok(hex_str) = leaves.extract::<String>() {
                     let bytes = hex::decode(hex_str)
                         .map_err(|e| PyValueError::new_err(format!("{e}")))?;
@@ -143,7 +138,6 @@ macro_rules! py_mrkle_proof {
                     return Ok(());
                 }
 
-                // Case 4: list of hex strings
                 if let Ok(multi_hex) = leaves.extract::<Vec<String>>() {
                     for (idx, hex_str) in multi_hex.iter().enumerate() {
                         let bytes = hex::decode(hex_str)
@@ -163,6 +157,10 @@ macro_rules! py_mrkle_proof {
 
 
             fn validate(&mut self) -> PyResult<bool> {
+                Ok(self.inner.valid())
+            }
+
+            fn try_validate(&mut self) -> PyResult<bool> {
                 self.inner.try_validate_basic().map_err(|e| PyProofError::new_err(format!("{e}")))
             }
 
@@ -201,13 +199,13 @@ macro_rules! py_mrkle_proof {
                 match encoding {
                     Some(Codec::JSON) => {
                         let json_str = serde_json::to_string(&self).map_err(|e| {
-                            PyValueError::new_err(format!("JSON serialization error: {}", e))
+                            SerdeError::new_err(format!("JSON serialization error: {}", e))
                         })?;
                         Ok(json_str.into_pyobject(py)?.into_any())
                     }
                     Some(Codec::CBOR) | None => {
                         let bytes = serde_cbor::to_vec(&self).map_err(|e| {
-                            PyValueError::new_err(format!("CBOR serialization error: {}", e))
+                            SerdeError::new_err(format!("CBOR serialization error: {}", e))
                         })?;
                         Ok(pyo3::types::PyBytes::new(py, &bytes).into_any())
                     }
@@ -225,10 +223,10 @@ macro_rules! py_mrkle_proof {
 
                 match encoding {
                     Some(Codec::JSON) => serde_json::from_slice(&bytes).map_err(|e| {
-                        PyValueError::new_err(format!("JSON deserialization error: {}", e))
+                        SerdeError::new_err(format!("JSON deserialization error: {}", e))
                     }),
                     Some(Codec::CBOR) | None => serde_cbor::from_slice(bytes).map_err(|e| {
-                        PyValueError::new_err(format!("CBOR deserialization error: {}", e))
+                        SerdeError::new_err(format!("CBOR deserialization error: {}", e))
                     }),
                 }
             }

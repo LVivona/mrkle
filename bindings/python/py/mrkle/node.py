@@ -1,11 +1,15 @@
 from __future__ import annotations
 
+from array import array
+
 from mrkle.crypto import new
 from mrkle.crypto.typing import Digest
-from mrkle.typing import D as _D, Buffer, SLOT_T as _SLOT_T
-from mrkle._tree import NodeT as _NodeT, NODE_MAP
 
-from typing import Generic, Union, Optional, overload, cast
+from mrkle.typing import D as _D, Buffer, SLOT_T
+
+from mrkle._tree import Node_T, NODE_MAP
+
+from typing import Generic, Union, Optional, cast
 
 
 __all__ = ["MrkleNode"]
@@ -27,18 +31,19 @@ class MrkleNode(Generic[_D]):
         D: Digest type used for hashing (e.g., Sha1, Sha256).
     """
 
-    _inner: _NodeT
+    _inner: Node_T
     _dtype: str
-    __slots__: _SLOT_T = ("_inner", "_dtype")
+    __slots__: SLOT_T = ("_inner", "_dtype")
 
-    def __init__(self, node: _NodeT) -> None:
+    def __init__(self, node: Node_T) -> None:
         raise TypeError(
             f"Cannot instantiate {self.__class__.__name__} directly. "
             "Use MrkleNode.leaf(...) to create leaf nodes."
         )
 
     @classmethod
-    def _construct_from_node_t(cls, node: _NodeT) -> "MrkleNode[_D]":
+    def construct_from_node(cls, node: Node_T) -> MrkleNode[_D]:
+        """Construct MrkleNode from internal Node type."""
         dtype: Digest = node.dtype()
         obj = object.__new__(cls)
         object.__setattr__(obj, "_inner", node)
@@ -46,7 +51,7 @@ class MrkleNode(Generic[_D]):
         return obj
 
     @classmethod
-    def __construct_node_backend(cls, node: _NodeT, dtype: Digest) -> "MrkleNode[_D]":
+    def __construct_node_backend(cls, node: Node_T, dtype: Digest) -> "MrkleNode[_D]":
         """Internal method to create a MrkleNode instance bypassing __init__.
 
         Args:
@@ -55,6 +60,10 @@ class MrkleNode(Generic[_D]):
 
         Returns:
             MrkleNode[_D]: A new instance wrapping the given inner node.
+
+        Rasied:
+            AssertionError: If the node's digest type doesn't match the
+                provided digest type.
         """
         assert node.dtype() == dtype, (
             f"Missmatch {node.dtype():!s} does not match {dtype:!s}"
@@ -63,6 +72,10 @@ class MrkleNode(Generic[_D]):
         object.__setattr__(obj, "_inner", node)
         object.__setattr__(obj, "_dtype", dtype.name())
         return obj
+
+    def value(self) -> Optional[bytes]:
+        """Return internal value of node."""
+        return self._inner.value()
 
     def digest(self) -> bytes:
         """Return digested bytes from the crypto digest."""
@@ -73,60 +86,47 @@ class MrkleNode(Generic[_D]):
         return self._inner.hexdigest()
 
     @classmethod
-    @overload
-    def leaf(cls, data: str) -> "MrkleNode[_D]": ...
-
-    @classmethod
-    @overload
-    def leaf(cls, data: str, *, name: Optional[str] = None) -> "MrkleNode[_D]": ...
-
-    @classmethod
-    @overload
-    def leaf(cls, data: bytes) -> "MrkleNode[_D]": ...
-
-    @classmethod
-    @overload
-    def leaf(cls, data: bytes, *, name: Optional[str] = None) -> "MrkleNode[_D]": ...
-
-    @classmethod
-    @overload
-    def leaf(cls, data: Buffer) -> "MrkleNode[_D]": ...
-
-    @classmethod
-    @overload
-    def leaf(cls, data: Buffer, *, name: Optional[str] = None) -> "MrkleNode[_D]": ...
-
-    @classmethod
     def leaf(
-        cls, data: Union[str, bytes, Buffer], *, name: Optional[str] = None
+        cls, data: Union[Buffer, str], *, name: Optional[str] = None
     ) -> "MrkleNode[_D]":
         """Create a leaf node from input data.
 
         Args:
-            data (T): The input data buffer to hash for the leaf node.
-            name (Optional[str]): The digest algorithm name (default: "sha1").
+            data: The input data buffer or string to hash for the leaf node.
+            name: The digest algorithm name (default: "sha1").
 
         Returns:
             MrkleNode[_D]: A new leaf node containing the hashed value.
 
         Raises:
-            ValueError: If the digest algorithm is not supported.
+            ValueError: Raised when the digest algorithm is not supported.
+            UnicodeEncodeError: Raised when string is not utf-8 supported.
         """
         if name is None:
             name = "sha1"
 
         if isinstance(data, str):
-            buffer = bytes(data.encode("utf-8"))
-        elif isinstance(data, Buffer):
+            buffer = data.encode("utf-8")
+        elif isinstance(data, (bytes, bytearray)):
             buffer = bytes(data)
+        elif isinstance(data, memoryview):
+            buffer = data.tobytes()
+        elif isinstance(data, array):
+            buffer = data.tobytes()
         else:
-            buffer = data
+            try:
+                buffer = bytes(data)
+            except (TypeError, ValueError) as e:
+                raise TypeError(
+                    f"Cannot convert {type(data).__name__} to bytes. "
+                    f"Expected str, bytes, bytearray, memoryview, or array."
+                ) from e
 
         digest: Digest = new(name, data=buffer)
         value = digest.finalize_reset()
 
         if inner := NODE_MAP.get(name.lower()):
-            node: _NodeT = inner.leaf_with_digest(buffer, value)
+            node: Node_T = inner.leaf_with_digest(buffer, value)
             return cls.__construct_node_backend(node, digest)
         else:
             raise ValueError(

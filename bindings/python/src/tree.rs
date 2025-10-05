@@ -1,11 +1,12 @@
 #![allow(dead_code)]
 #![allow(non_camel_case_types)]
 
-use pyo3::exceptions::PyValueError;
+use pyo3::exceptions::{PyIndexError, PyTypeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::pycell::PyRef;
-use pyo3::types::{PyBytes, PyDict, PyType};
-use pyo3::Bound as PyBound;
+use pyo3::sync::OnceLockExt;
+use pyo3::types::{PyBytes, PyDict, PyList, PySequence, PySlice, PyType};
+use pyo3::{intern, Bound as PyBound};
 
 use crypto::digest::Digest;
 
@@ -16,7 +17,9 @@ use crate::{
         PyKeccak384Wrapper, PyKeccak512Wrapper, PySha1Wrapper, PySha224Wrapper, PySha256Wrapper,
         PySha384Wrapper, PySha512Wrapper,
     },
-    errors::{NodeError as PyNodeError, SerdeError},
+    errors::{NodeError as PyNodeError, SerdeError, TreeError},
+    utils::extract_to_bytes,
+    MRKLE_MODULE,
 };
 
 use mrkle::error::NodeError;
@@ -119,6 +122,10 @@ macro_rules! py_mrkle_node {
                 <$digest>::new()
             }
 
+            fn value(&self) -> Option<&[u8]> {
+                self.inner.value().map(|value| value.as_ref())
+            }
+
             #[inline]
             fn digest(&self) -> &[u8] {
                 self.inner.hash()
@@ -131,8 +138,8 @@ macro_rules! py_mrkle_node {
 
             #[inline]
             #[staticmethod]
-            pub fn leaf(payload: PyBound<'_, PyBytes>) -> Self {
-                let bytes: Box<[u8]> = payload.as_bytes().to_vec().into_boxed_slice();
+            pub fn leaf(payload: Vec<u8>) -> Self {
+                let bytes: Box<[u8]> = payload.into_boxed_slice();
                 Self {
                     inner: MrkleNode::<Box<[u8]>, $digest, usize>::leaf(bytes),
                 }
@@ -280,7 +287,7 @@ macro_rules! py_mrkle_tree {
 
         impl PartialEq for $name {
             fn eq(&self, other: &Self) -> bool {
-                if self.root() != other.root() {
+                if self.root().as_ref().ok() != other.root().as_ref().ok() {
                     return false;
                 }
 
@@ -336,8 +343,8 @@ macro_rules! py_mrkle_tree {
         #[pymethods]
         impl $name {
             #[inline]
-            fn root(&self) -> String {
-                format!("{}", self.inner.root().to_hex())
+            fn root(&self) -> PyResult<&[u8]> {
+                Ok(self.inner.try_root().map_err(|e| TreeError::new_err(format!("{e}")))?.hash())
             }
 
             #[inline]
@@ -378,9 +385,16 @@ macro_rules! py_mrkle_tree {
             #[classmethod]
             pub fn from_leaves(
                 _cls: &PyBound<'_, PyType>,
-                mut leaves: Vec<PyBound<'_, PyBytes>>,
+                leaves: Vec<PyBound<'_, PyAny>>,
             ) -> PyResult<Self> {
+
+
                 let mut tree = Tree::<$node, usize>::new();
+
+                let mut leaves: Vec<Vec<u8>> = leaves
+                    .into_iter()
+                    .map(|obj| extract_to_bytes(&obj))
+                    .collect::<PyResult<Vec<_>>>()?;
 
                 if leaves.is_empty() {
                     return Ok(Self { inner: tree });
@@ -426,6 +440,98 @@ macro_rules! py_mrkle_tree {
                 tree.set_root(queue.pop_front());
                 Ok(Self { inner: tree })
             }
+
+            fn __getitem__<'py>(
+                &self,
+                py: Python<'py>,
+                key: PyBound<'py, PyAny>,
+            ) -> PyResult<PyBound<'py, PyList>> {
+                let module = PyModule::import(py, intern!(py, "mrkle"))?;
+                MRKLE_MODULE.get_or_init_py_attached(py, || module.clone().unbind());
+                let node_cls = module.getattr(intern!(py, "MrkleNode"))?;
+
+                if let Ok(mut index) = key.extract::<isize>() {
+                    let len = self.len() as isize;
+
+                    if index < 0 {
+                        index = len
+                            .checked_add(index)
+                            .ok_or_else(|| PyIndexError::new_err("index out of range"))?;
+                    }
+
+                    if index < 0 || index >= len {
+                        return Err(PyIndexError::new_err("index out of range"));
+                    }
+
+                    let idx = index as usize;
+                    let value = self
+                        .get(idx)
+                        .ok_or_else(|| PyIndexError::new_err("index out of range"))?;
+
+                    let py_node = node_cls.call_method1(
+                        intern!(py, "construct_from_node"),
+                        (value.clone(),),
+                    )?;
+
+                    return PyList::new(py, &[py_node]);
+                }
+
+                if let Ok(slice) = key.extract::<PyBound<'_, PySlice>>() {
+                    let indices = slice.indices(self.len() as isize)?;
+                    let (start, stop, step) = (indices.start, indices.stop, indices.step);
+
+                    let mut out = Vec::new();
+                    let mut i = start;
+                    while if step > 0 { i < stop } else { i > stop } {
+                        let idx = i as usize;
+                        if let Some(value) = self.get(idx) {
+                            let py_node = node_cls.call_method1(
+                                intern!(py, "construct_from_node"),
+                                (value.clone(),),
+                            )?;
+                            out.push(py_node);
+                        }
+                        i += step;
+                    }
+
+                    return PyList::new(py, &out);
+                }
+
+                if let Ok(seq) = key.extract::<PyBound<'_, PySequence>>() {
+                    let mut out = Vec::new();
+
+                    for item in seq.try_iter()? {
+                        let mut index: isize = item?.extract()?;
+                        let len = self.len() as isize;
+
+                        if index < 0 {
+                            index = len
+                                .checked_add(index)
+                                .ok_or_else(|| PyIndexError::new_err("index out of range"))?;
+                        }
+
+                        if index < 0 || index >= len {
+                            return Err(PyIndexError::new_err("index out of range"));
+                        }
+
+                        let idx = index as usize;
+                        if let Some(value) = self.get(idx) {
+                            let py_node = node_cls.call_method1(
+                                intern!(py, "construct_from_node"),
+                                (value.clone(),),
+                            )?;
+                            out.push(py_node);
+                        }
+                    }
+
+                    return PyList::new(py, &out);
+                }
+
+                Err(PyTypeError::new_err(
+                    "indices must be int, slice, or sequence of ints",
+                ))
+            }
+
 
 
             fn __iter__(slf: PyRef<'_, Self>) -> PyResult<$iter_name> {
@@ -688,13 +794,6 @@ fn process_traversal<N: PyMrkleNode<D, usize>, D: Digest>(
     value: &Bound<'_, PyAny>,
     tree: &mut Tree<N, usize>,
 ) -> PyResult<NodeIndex<usize>> {
-    // If leaf return leaf node
-    if let Ok(child) = value.extract::<PyBound<PyBytes>>() {
-        let leaf = N::leaf(child.as_bytes());
-        let index = tree.push(leaf);
-        return Ok(index);
-    };
-
     if let Ok(child_dict) = value.downcast::<PyDict>() {
         let mut indices: Vec<NodeIndex<usize>> = Vec::new();
 
@@ -713,6 +812,12 @@ fn process_traversal<N: PyMrkleNode<D, usize>, D: Digest>(
         }
 
         return Ok(node_id);
+    }
+
+    if let Ok(child) = extract_to_bytes(&value) {
+        let leaf = N::leaf(child);
+        let index = tree.push(leaf);
+        return Ok(index);
     }
 
     Err(PyValueError::new_err(format!(

@@ -4,7 +4,7 @@ from typing import Any
 def unflatten(dictionary: dict[str, Any]):
     """Retrun an unflatten tree."""
     resultDict: dict[str, Any] = dict()
-    for key, value in iter(dictionary.items()):
+    for key, value in dictionary.items():
         parts = key.split(".")
         d = resultDict
         for part in parts[:-1]:
