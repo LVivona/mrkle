@@ -128,6 +128,8 @@ TREE_MAP: Final[Mapping[str, TreeT]] = MappingProxyType(
     {
         "blake2s": MrkleTreeBlake2s,
         "blake2b": MrkleTreeBlake2b,
+        "blake2s256": MrkleTreeBlake2s,
+        "blake2b512": MrkleTreeBlake2b,
         "keccak224": MrkleTreeKeccak224,
         "keccak256": MrkleTreeKeccak256,
         "keccak384": MrkleTreeKeccak384,
@@ -145,6 +147,8 @@ NODE_MAP: Final[Mapping[str, NodeT]] = MappingProxyType(
     {
         "blake2s": MrkleNodeBlake2s,
         "blake2b": MrkleNodeBlake2b,
+        "blake2s256": MrkleNodeBlake2s,
+        "blake2b512": MrkleNodeBlake2b,
         "keccak224": MrkleNodeKeccak224,
         "keccak256": MrkleNodeKeccak256,
         "keccak384": MrkleNodeKeccak384,

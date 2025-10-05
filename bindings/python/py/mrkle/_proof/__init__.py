@@ -57,6 +57,8 @@ PROOF_MAP: Final[Mapping[str, type[ProofT]]] = MappingProxyType(
     {
         "blake2s": MrkleProofBlake2s,
         "blake2b": MrkleProofBlake2b,
+        "blake2s256": MrkleProofBlake2s,
+        "blake2b512": MrkleProofBlake2b,
         "keccak224": MrkleProofKeccak224,
         "keccak256": MrkleProofKeccak256,
         "keccak384": MrkleProofKeccak384,

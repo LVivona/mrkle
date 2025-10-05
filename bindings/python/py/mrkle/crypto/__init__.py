@@ -69,6 +69,8 @@ _algorithms_map: Final[Mapping[str, type[Digest]]] = MappingProxyType(
     {
         "blake2s": Blake2s,
         "blake2b": Blake2b,
+        "blake2b512": Blake2b,
+        "blake2s256": Blake2s,
         "keccak224": Keccak224,
         "keccak256": Keccak256,
         "keccak384": Keccak384,
