@@ -1,6 +1,8 @@
+from array import array
 import sys
-from typing import runtime_checkable, Protocol, TypeVar, Literal
+from typing import Union, runtime_checkable, Protocol, TypeVar, Literal
 from typing_extensions import TypeAlias
+
 from mrkle.crypto.typing import Digest
 
 if sys.version_info >= (3, 12):
@@ -18,10 +20,23 @@ else:
             """Convert the object to bytes."""
             ...
 
-    Buffer: TypeAlias = SupportsBytes
+    Buffer: TypeAlias = Union[
+        bytes,
+        bytearray,
+        memoryview,
+        array,
+        SupportsBytes,
+    ]
 
-# Internal Rust Digest Trait
+# Internal Rust Digest type trait.
 D = TypeVar("D", bound=Digest)
+
+# __slot types for internal use of generic classes.
 SLOT_T = tuple[Literal["_inner"], Literal["_dtype"]]
 
-__all__ = ["SLOT_T", "D", "Buffer"]
+
+__all__ = [
+    "SLOT_T",
+    "D",
+    "Buffer",
+]
