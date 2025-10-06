@@ -5,7 +5,7 @@ use pyo3::exceptions::{PyIndexError, PyTypeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::pycell::PyRef;
 use pyo3::sync::OnceLockExt;
-use pyo3::types::{PyBytes, PyDict, PyList, PySequence, PySlice, PyType};
+use pyo3::types::{PyBytes, PyDict, PyIterator, PyList, PySequence, PySlice, PyType};
 use pyo3::{intern, Bound as PyBound};
 
 use crypto::digest::Digest;
@@ -386,16 +386,27 @@ macro_rules! py_mrkle_tree {
             #[classmethod]
             pub fn from_leaves(
                 _cls: &PyBound<'_, PyType>,
-                leaves: Vec<PyBound<'_, PyAny>>,
+                leaves: PyBound<'_, PyAny>,
             ) -> PyResult<Self> {
 
 
                 let mut tree = Tree::<$node, usize>::new();
 
-                let mut leaves: Vec<Vec<u8>> = leaves
-                    .into_iter()
-                    .map(|obj| extract_to_bytes(&obj))
-                    .collect::<PyResult<Vec<_>>>()?;
+                let mut leaves = if let Ok(leaves) = leaves.extract::<Vec<PyBound<'_, PyAny>>>() {
+                    leaves
+                        .into_iter()
+                        .map(|obj| extract_to_bytes(&obj))
+                        .collect::<PyResult<Vec<_>>>()
+                } else if let Ok(leaves) = leaves.extract::<PyBound<'_, PyIterator>>() {
+                    leaves
+                        .try_iter()?
+                        .map(|obj| obj.and_then(|obj| extract_to_bytes(&obj)))
+                        .collect::<PyResult<Vec<_>>>()
+
+                } else {
+                    return Err(PyTypeError::new_err("Unable to construct tree due to wrong types"))
+                }?;
+
 
                 if leaves.is_empty() {
                     return Ok(Self { inner: tree });
@@ -437,8 +448,9 @@ macro_rules! py_mrkle_tree {
 
                     queue.push_back(parent_idx);
                 }
-
                 tree.set_root(queue.pop_front());
+
+
                 Ok(Self { inner: tree })
             }
 

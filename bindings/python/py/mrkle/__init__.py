@@ -36,7 +36,6 @@ __all__ = [
     "MrkleTreeIter",
     "MerkleError",
     "TreeError",
-    "HashError",
     "SerdeError",
     "NodeError",
     "ProofError",

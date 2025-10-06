@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Sequence, Iterable
+from collections.abc import Iterator, Sequence, Iterable
 from typing import (
     Any,
     Generic,
@@ -150,7 +150,10 @@ class MrkleTree(Generic[_D]):
 
     @classmethod
     def from_leaves(
-        cls, leaves: Sequence[Union[Buffer, str]], *, name: Optional[str] = None
+        cls,
+        leaves: Union[Sequence[Union[Buffer, str]], Iterator[Union[Buffer, str]]],
+        *,
+        name: Optional[str] = None,
     ) -> "MrkleTree[_D]":
         """Construct a Merkle tree from a list of leaf data.
 
@@ -360,9 +363,9 @@ class MrkleTree(Generic[_D]):
             AssertionError: If the tree's digest type doesn't match the
                 provided digest type.
         """
-        assert tree.dtype() == dtype, (
-            f"Mismatch: {tree.dtype()!s} does not match {dtype!s}"
-        )
+        assert (
+            tree.dtype() == dtype
+        ), f"Mismatch: {tree.dtype()!s} does not match {dtype!s}"
         obj = object.__new__(cls)
         object.__setattr__(obj, "_inner", tree)
         object.__setattr__(obj, "_dtype", dtype)

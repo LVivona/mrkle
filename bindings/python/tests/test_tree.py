@@ -232,3 +232,9 @@ def test_subset_different_roots():
     tree1 = MrkleTree.from_leaves([b"a", b"b", b"c"])
     tree2 = MrkleTree.from_leaves([b"a", b"b"])
     assert tree1.root() != tree2.root()
+
+
+def test_from_iter_leaves():
+    leaves = iter([b"a", b"b", b"c"])
+    tree = MrkleTree.from_leaves(leaves)
+    assert isinstance(tree, MrkleTree)
