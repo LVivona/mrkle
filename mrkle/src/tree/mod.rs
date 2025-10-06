@@ -185,7 +185,10 @@ impl<N: Node<Ix>, Ix: IndexType> Tree<N, Ix> {
         self.nodes.get_mut(idx)
     }
 
-    /// Push nodes onto [`Tree`] node list without connection.
+    /// Push nodes onto [`Tree`].
+    ///
+    /// Already assumes the node connection have been established
+    /// if [`Node`] does not inherit [`MutNode`]
     ///
     /// Return there [`NodeIndex`] within the tree
     pub fn push(&mut self, node: N) -> NodeIndex<Ix> {
@@ -193,13 +196,13 @@ impl<N: Node<Ix>, Ix: IndexType> Tree<N, Ix> {
         NodeIndex::new(self.nodes.len() - 1)
     }
 
-    /// Prune [`Node<Ix>`] from tree.
-    pub fn prune(&mut self, index: NodeIndex<Ix>) -> Result<(), TreeError>
+    /// Prune [`Node<Ix>`] from tree with [`NodeIndex<Ix>`].
+    pub fn prune<I: Into<NodeIndex<Ix>>>(&mut self, index: I) -> Result<(), TreeError>
     where
         N: MutNode<Ix>,
     {
         let mut remove = BTreeSet::new();
-        let mut queue = VecDeque::from([index]);
+        let mut queue = VecDeque::from([index.into()]);
 
         // Get nodes to prune from the tree.
         while let Some(idx) = queue.pop_front() {
@@ -400,27 +403,18 @@ impl<N: Node<Ix>, Ix: IndexType> Tree<N, Ix> {
         Ok(())
     }
 
-    /// Return a vector of  [`NodeIndex<Ix>`], location were the leaves can be index.
-    pub fn leaves(&self) -> Vec<NodeIndex<Ix>> {
+    /// Returns a vector of [`NodeIndex<Ix>`] for all leaf nodes in the tree.
+    pub fn leaf_indices(&self) -> Vec<NodeIndex<Ix>> {
         self.iter_idx()
-            .filter(|&idx| {
-                self.get(idx.index())
-                    .filter(|&node| node.is_leaf())
-                    .is_some()
-            })
+            .filter(|&idx| self.get(idx.index()).map_or(false, |node| node.is_leaf()))
             .collect()
     }
 
-    /// Return a vector of  [`Node`] references.
-    pub fn leaves_ref(&self) -> Vec<&N> {
+    /// Returns a vector of references to all leaf nodes in the tree.
+    pub fn leaves(&self) -> Vec<&N> {
         self.iter_idx()
             .filter_map(|idx| self.get(idx.index()).filter(|node| node.is_leaf()))
             .collect()
-    }
-
-    /// Inserts an [`Node`] at position index within the vector, shifting all elements after it to the right.
-    pub fn insert(&mut self, index: NodeIndex<Ix>, node: N) {
-        self.nodes.insert(index.index(), node);
     }
 
     ///Return root [`TreeView`] of the [`Tree`]
@@ -552,7 +546,7 @@ impl<N: Node<Ix>, Ix: IndexType> core::ops::Index<usize> for Tree<N, Ix> {
     }
 }
 
-impl<N: Node<Ix>, Ix: IndexType> core::ops::IndexMut<usize> for Tree<N, Ix> {
+impl<N: MutNode<Ix>, Ix: IndexType> core::ops::IndexMut<usize> for Tree<N, Ix> {
     fn index_mut(&mut self, index: usize) -> &mut Self::Output {
         &mut self.nodes[index]
     }

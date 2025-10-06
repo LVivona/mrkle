@@ -984,14 +984,14 @@ impl<T, D: Digest, Ix: IndexType> MrkleTree<T, D, Ix> {
 
     /// Return a vector of  [`NodeIndex<Ix>`].
     #[inline]
-    pub fn leaves(&self) -> Vec<NodeIndex<Ix>> {
-        self.core.leaves()
+    pub fn leaf_indices(&self) -> Vec<NodeIndex<Ix>> {
+        self.core.leaf_indices()
     }
 
     /// Return a vector of  [`Node`] references.
     #[inline]
-    pub fn leaves_ref(&self) -> Vec<&MrkleNode<T, D, Ix>> {
-        self.core.leaves_ref()
+    pub fn leaves(&self) -> Vec<&MrkleNode<T, D, Ix>> {
+        self.core.leaves()
     }
 
     /// Searches for a node by checking its claimed parent-child relationship.
@@ -1110,6 +1110,22 @@ impl<T, D: Digest, Ix: IndexType> Eq for MrkleTree<T, D, Ix> {}
 
 unsafe impl<T: Send, D: Digest, Ix: IndexType> Send for MrkleTree<T, D, Ix> {}
 unsafe impl<T: Sync, D: Digest, Ix: IndexType> Sync for MrkleTree<T, D, Ix> {}
+
+impl<T, D: Digest, Ix: IndexType> core::ops::Index<usize> for MrkleTree<T, D, Ix> {
+    type Output = MrkleNode<T, D, Ix>;
+
+    fn index(&self, index: usize) -> &Self::Output {
+        &self.core[index]
+    }
+}
+
+impl<T, D: Digest, Ix: IndexType> core::ops::Index<NodeIndex<Ix>> for MrkleTree<T, D, Ix> {
+    type Output = MrkleNode<T, D, Ix>;
+
+    fn index(&self, index: NodeIndex<Ix>) -> &Self::Output {
+        &self.core[index.index()]
+    }
+}
 
 #[cfg(feature = "serde")]
 impl<T, D: Digest, Ix: IndexType> serde::Serialize for MrkleTree<T, D, Ix>

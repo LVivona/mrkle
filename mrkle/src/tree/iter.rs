@@ -161,7 +161,7 @@ where
         }
 
         let index = O::pop(&mut self.state.storage)?;
-        let node = self.tree.get(index.index())?;
+        let node = &self.tree[index];
 
         // Add children to storage if not a leaf
         if !node.is_leaf() {
@@ -270,7 +270,7 @@ where
     O: TraversalOrder<Ix>,
 {
     state: IterState<O::Storage>,
-    inner: TreeView<'a, N, Ix>,
+    tree: TreeView<'a, N, Ix>,
 }
 
 impl<'a, N, Ix, O> ViewIter<'a, N, Ix, O>
@@ -284,7 +284,7 @@ where
     pub(crate) fn new(tree: TreeView<'a, N, Ix>) -> Self {
         Self {
             state: IterState::new(),
-            inner: tree,
+            tree,
         }
     }
 }
@@ -299,15 +299,15 @@ where
 
     fn next(&mut self) -> Option<Self::Item> {
         if !self.state.is_started() {
-            if self.inner.is_empty() {
+            if self.tree.is_empty() {
                 return None;
             }
-            O::push(&mut self.state.storage, self.inner.root);
+            O::push(&mut self.state.storage, self.tree.root);
             self.state.start();
         }
 
         let index = O::pop(&mut self.state.storage)?;
-        let node = self.inner.get(&index)?;
+        let node = self.tree.get(&index)?;
 
         if !node.is_leaf() {
             O::extend(&mut self.state.storage, node.children().iter().copied());
@@ -319,7 +319,7 @@ where
     #[inline]
     fn size_hint(&self) -> (usize, Option<usize>) {
         if !self.state.is_started() {
-            (0, Some(self.inner.len()))
+            (0, Some(self.tree.len()))
         } else {
             (0, None)
         }
@@ -342,7 +342,7 @@ where
     O: TraversalOrder<Ix>,
 {
     state: IterState<O::Storage>,
-    inner: TreeView<'a, N, Ix>,
+    tree: TreeView<'a, N, Ix>,
 }
 
 impl<'a, N, Ix, O> ViewIndexIter<'a, N, Ix, O>
@@ -356,7 +356,7 @@ where
     pub(crate) fn new(tree: TreeView<'a, N, Ix>) -> Self {
         Self {
             state: IterState::new(),
-            inner: tree,
+            tree,
         }
     }
 }
@@ -371,17 +371,17 @@ where
 
     fn next(&mut self) -> Option<Self::Item> {
         if !self.state.is_started() {
-            if self.inner.is_empty() {
+            if self.tree.is_empty() {
                 return None;
             }
-            let root_index = self.inner.root;
+            let root_index = self.tree.root;
             O::push(&mut self.state.storage, root_index);
             self.state.start();
         }
 
         let index = O::pop(&mut self.state.storage)?;
 
-        self.inner
+        self.tree
             .get(&index)
             .filter(|&node| !node.is_leaf())
             .inspect(|&node| O::extend(&mut self.state.storage, node.children().iter().copied()));
@@ -392,7 +392,7 @@ where
     #[inline]
     fn size_hint(&self) -> (usize, Option<usize>) {
         if !self.state.is_started() {
-            (0, Some(self.inner.len()))
+            (0, Some(self.tree.len()))
         } else {
             (0, None)
         }

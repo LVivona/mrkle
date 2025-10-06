@@ -358,10 +358,11 @@ macro_rules! py_mrkle_tree {
             }
 
             #[inline]
-            pub fn leaves(&self) -> Vec<$node> {
-                self.leaves_index()
+            #[pyo3(name = "leaves")]
+            pub fn leaves_py(&self) -> Vec<$node> {
+                self.leaf_indices()
                     .iter()
-                    .map(|leaf| self.inner.get(leaf.index()).unwrap().clone())
+                    .map(|&index| self.inner[index].clone())
                     .collect()
             }
 
@@ -643,14 +644,14 @@ macro_rules! py_mrkle_tree {
 
             /// Return a vector of  [`NodeIndex<Ix>`].
             #[inline]
-            pub fn leaves_index(&self) -> Vec<NodeIndex<usize>> {
-                self.inner.leaves()
+            pub fn leaf_indices(&self) -> Vec<NodeIndex<usize>> {
+                self.inner.leaf_indices()
             }
 
             /// Return a vector of  [`Node`] references.
             #[inline]
-            pub fn leaves_ref(&self) -> Vec<&$node> {
-                self.inner.leaves_ref()
+            pub fn leaves(&self) -> Vec<&$node> {
+                self.inner.leaves()
             }
 
             /// Searches for a node by checking its claimed parent-child relationship.

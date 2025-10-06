@@ -283,26 +283,29 @@ impl<Ix: IndexType> From<NodeIndex<Ix>> for usize {
 /// This trait provides methods for modifying node structure, complementing
 /// the read-only operations provided by the [`Node`] trait.
 pub trait MutNode<Ix: IndexType = DefaultIx>: Node<Ix> {
-    /// Sets the parent index within in node.
-    fn set_parent(&mut self, _parent: NodeIndex<Ix>) {
+    /// Sets the parent index within the node.
+    fn set_parent(&mut self, parent: NodeIndex<Ix>) {
+        let _ = parent;
         unimplemented!()
     }
 
-    /// Removes and returns the parent within the node; if any.
+    /// Removes and returns the parent within the node, if any.
     fn take_parent(&mut self) -> Option<NodeIndex<Ix>> {
         unimplemented!()
     }
 
-    /// Adds a child node index within tree to the end of the children list.
+    /// Adds a child node index to the end of the children list.
     ///
     /// # Panics
-    /// Panics if [`Node`] already exsit within list.
-    fn push(&mut self, _child: NodeIndex<Ix>) {
+    /// Panics if the child already exists within the list.
+    fn push(&mut self, child: NodeIndex<Ix>) {
+        let _ = child;
         unimplemented!()
     }
 
     /// Tries to add a child, returning an error if the operation is invalid.
-    fn try_push(&mut self, _child: NodeIndex<Ix>) -> Result<(), NodeError> {
+    fn try_push(&mut self, child: NodeIndex<Ix>) -> Result<(), NodeError> {
+        let _ = child;
         unimplemented!()
     }
 
@@ -315,7 +318,8 @@ pub trait MutNode<Ix: IndexType = DefaultIx>: Node<Ix> {
     ///
     /// # Panics
     /// Panics if `index > len`.
-    fn insert(&mut self, _index: usize, _child: NodeIndex<Ix>) {
+    fn insert(&mut self, index: usize, child: NodeIndex<Ix>) {
+        let _ = (index, child);
         unimplemented!()
     }
 
@@ -323,13 +327,16 @@ pub trait MutNode<Ix: IndexType = DefaultIx>: Node<Ix> {
     ///
     /// # Panics
     /// Panics if `index >= len`.
-    fn remove(&mut self, _index: usize) -> NodeIndex<Ix> {
+    fn remove(&mut self, index: usize) -> NodeIndex<Ix> {
+        let _ = index;
         unimplemented!()
     }
 
     /// Removes the first occurrence of the specified child.
+    ///
     /// Returns `true` if the child was found and removed.
-    fn remove_item(&mut self, _child: NodeIndex<Ix>) -> bool {
+    fn remove_item(&mut self, child: NodeIndex<Ix>) -> bool {
+        let _ = child;
         unimplemented!()
     }
 
@@ -339,10 +346,11 @@ pub trait MutNode<Ix: IndexType = DefaultIx>: Node<Ix> {
     }
 
     /// Retains only the children specified by the predicate.
-    fn retain<F>(&mut self, _f: F)
+    fn retain<F>(&mut self, f: F)
     where
         F: FnMut(&NodeIndex<Ix>) -> bool,
     {
+        let _ = f;
         unimplemented!()
     }
 
@@ -350,7 +358,8 @@ pub trait MutNode<Ix: IndexType = DefaultIx>: Node<Ix> {
     ///
     /// # Panics
     /// Panics if either index is out of bounds.
-    fn swap(&mut self, _a: usize, _b: usize) {
+    fn swap(&mut self, a: usize, b: usize) {
+        let _ = (a, b);
         unimplemented!()
     }
 

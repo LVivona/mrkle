@@ -64,19 +64,19 @@ impl<'s, N: Node<Ix>, Ix: IndexType> TreeView<'s, N, Ix> {
     }
 }
 
-impl<'s, N: Node<Ix>, Ix: IndexType> From<&'s Tree<N, Ix>> for TreeView<'s, N, Ix> {
-    fn from(value: &'s Tree<N, Ix>) -> Self {
+impl<'source, N: Node<Ix>, Ix: IndexType> From<&'source Tree<N, Ix>> for TreeView<'source, N, Ix> {
+    fn from(value: &'source Tree<N, Ix>) -> Self {
         let root = value.root.unwrap();
-        let root_node: &N = &value.nodes[root.index()];
-        let mut nodes: Vec<(NodeIndex<Ix>, &'s N)> = vec![(root, root_node)];
+        let root_node: &N = &value[root];
+        let mut nodes: Vec<(NodeIndex<Ix>, &'source N)> = vec![(root, root_node)];
         // TODO: When iter trait is implmented use
         // to search through the tree instead
         // of hard coded BFS search through the tree.
         let mut q: VecDeque<NodeIndex<Ix>> = VecDeque::from(vec![root]);
         while let Some(idx) = q.pop_front() {
-            let node = &value.nodes[idx.index()];
+            let node = &value[idx];
             for child in node.children() {
-                nodes.push((child, &value.nodes[child.index()]));
+                nodes.push((child, &value[child]));
                 q.push_back(child);
             }
         }
