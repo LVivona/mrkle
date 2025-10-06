@@ -65,9 +65,9 @@ class MrkleNode(Generic[_D]):
             AssertionError: If the node's digest type doesn't match the
                 provided digest type.
         """
-        assert node.dtype() == dtype, (
-            f"Missmatch {node.dtype():!s} does not match {dtype:!s}"
-        )
+        assert (
+            node.dtype() == dtype
+        ), f"Missmatch {node.dtype():!s} does not match {dtype:!s}"
         obj = object.__new__(cls)
         object.__setattr__(obj, "_inner", node)
         object.__setattr__(obj, "_dtype", dtype.name())
