@@ -406,7 +406,7 @@ impl<N: Node<Ix>, Ix: IndexType> Tree<N, Ix> {
     /// Returns a vector of [`NodeIndex<Ix>`] for all leaf nodes in the tree.
     pub fn leaf_indices(&self) -> Vec<NodeIndex<Ix>> {
         self.iter_idx()
-            .filter(|&idx| self.get(idx.index()).map_or(false, |node| node.is_leaf()))
+            .filter(|&idx| self.get(idx.index()).is_some_and(|node| node.is_leaf()))
             .collect()
     }
 
