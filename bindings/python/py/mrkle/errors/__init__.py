@@ -14,8 +14,10 @@ implementation:
 
 Example:
     >>> from mrkle.errors import ProofError
+    >>> from mrkle.tree import MrkleTree
+    >>> tree = MrkleTree.from_leaves(["a", "b", "c"], name="sha224")
     >>> try:
-    ...     proof.validate()
+    ...     proof = tree.generate_proof(3)
     ... except ProofError as e:
     ...     print("Invalid proof:", e)
 """
