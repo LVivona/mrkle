@@ -1,3 +1,5 @@
+__all__ = ["MerkleError", "ProofError", "SerdeError", "TreeError", "NodeError"]
+
 class MerkleError(BaseException):
     """
     Base Exception for all Merkle tree related errors.
