@@ -4,7 +4,7 @@ from mrkle.crypto import Sha1
 
 
 def test_empty_tree():
-    tree: MrkleTree[Sha1] = MrkleTree.from_leaves([])
+    tree = MrkleTree.from_leaves([])
     assert tree.is_empty()
     assert len(tree) == 0
 
@@ -13,27 +13,27 @@ def test_empty_dict():
     with pytest.raises(
         ValueError, match="The dictionary can not contain more than one root."
     ):
-        _: MrkleTree[Sha1] = MrkleTree.from_dict({})
+        _ = MrkleTree.from_dict({})
 
 
 def test_from_single_leaf_tree():
-    tree: MrkleTree[Sha1] = MrkleTree.from_leaves(["hello"])
+    tree = MrkleTree.from_leaves(["hello"])
     assert len(tree) == 2
 
 
 def test_from_two_leaves():
-    tree: MrkleTree[Sha1] = MrkleTree.from_leaves(["hello", "world"])
+    tree = MrkleTree.from_leaves(["hello", "world"])
     assert len(tree) == 3
     assert not tree.is_empty()
 
 
 def test_from_multiple_leaves():
-    tree: MrkleTree[Sha1] = MrkleTree.from_leaves(["a", "b", "c", "d"])
+    tree = MrkleTree.from_leaves(["a", "b", "c", "d"])
     assert len(tree) == 7  # 4 leaves + 3 internal nodes
 
 
 def test_from_bytes_leaves():
-    tree: MrkleTree[Sha1] = MrkleTree.from_leaves([b"hello", b"world", b"test"])
+    tree = MrkleTree.from_leaves([b"hello", b"world", b"test"])
     assert len(tree) == 5
 
 
@@ -104,7 +104,7 @@ def test_leaves_are_leaf_nodes():
 
 
 def test_empty_tree_no_leaves():
-    tree: MrkleTree[Sha1] = MrkleTree.from_leaves([])
+    tree = MrkleTree.from_leaves([])
     assert tree.leaves() == []
 
 

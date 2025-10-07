@@ -30,9 +30,9 @@ PAYLOADS = [
 ]
 
 
-@pytest.mark.parametrize("alg,payload", [
-    (alg, payload) for alg in HASHLIB_ALGS for payload in PAYLOADS
-])
+@pytest.mark.parametrize(
+    "alg,payload", [(alg, payload) for alg in HASHLIB_ALGS for payload in PAYLOADS]
+)
 def test_hashlib_compatible(alg, payload):
     """Test algorithms supported by both hashlib and mrkle.crypto."""
     h1 = HASHLIB_ALGS[alg](payload).digest()
@@ -40,9 +40,9 @@ def test_hashlib_compatible(alg, payload):
     assert h1 == h2, f"Mismatch for {alg} with payload {payload!r}"
 
 
-@pytest.mark.parametrize("alg,payload", [
-    (alg, payload) for alg in MRKLE_ONLY_ALGS for payload in PAYLOADS
-])
+@pytest.mark.parametrize(
+    "alg,payload", [(alg, payload) for alg in MRKLE_ONLY_ALGS for payload in PAYLOADS]
+)
 def test_mrkle_only(alg, payload):
     """Test keccak-family hashes (not in hashlib)."""
     h = getattr(crypto, alg).digest(payload)

@@ -4,7 +4,7 @@ use pyo3::sync::OnceLockExt;
 
 use pyo3::Bound as PyBound;
 
-use pyo3::exceptions::PyValueError;
+use pyo3::exceptions::{PyIndexError, PyNotImplementedError, PyValueError};
 use pyo3::types::{PyDict, PyModule, PyType};
 
 use mrkle::error::ProofError;
@@ -76,7 +76,7 @@ macro_rules! py_mrkle_proof {
             fn generate(
                 _cls: &Bound<'_, PyType>,
                 tree: Bound<'_, PyAny>,
-                leaves: Vec<usize>,
+                leaves: Vec<isize>,
             ) -> PyResult<Self> {
                 Python::with_gil(|py| {
                     let module = PyModule::import(py, intern!(py, "mrkle"))?;
@@ -101,13 +101,26 @@ macro_rules! py_mrkle_proof {
                     }
 
                     // Generate proof for all leaves, not just the first one
-                    let proof = Self::generate_proof_from_leaf(
-                        &internal_tree.inner,
-                        NodeIndex::new(leaves[0]),
-                    )
-                    .map_err(|e| PyProofError::new_err(format!("{e}")))?;
+                    if leaves.len() == 1 {
+                        let mut index = leaves[0];
+                        let len = internal_tree.inner.len() as isize;
+                        if index < 0 {
+                            index = len
+                                .checked_add(index)
+                                .ok_or_else(|| PyIndexError::new_err("index out of range"))?;
+                        }
 
-                    Ok(proof)
+                        if index < 0 || index >= len {
+                            return Err(PyIndexError::new_err("index out of range"));
+                        }
+                        let proof = Self::generate_proof_from_leaf(
+                            &internal_tree.inner,
+                            NodeIndex::new(index as usize),
+                        ).map_err(|e| PyProofError::new_err(format!("{e}")))?;
+                        Ok(proof)
+                    } else {
+                        Err(PyNotImplementedError::new_err("Multi-proof has not been implmented."))
+                    }
                 })
             }
 
@@ -198,7 +211,7 @@ macro_rules! py_mrkle_proof {
             ) -> PyResult<Bound<'py, PyAny>> {
                 match encoding {
                     Some(Codec::JSON) => {
-                        let json_str = serde_json::to_string(&self).map_err(|e| {
+                        let json_str = serde_json::to_vec(&self).map_err(|e| {
                             SerdeError::new_err(format!("JSON serialization error: {}", e))
                         })?;
                         Ok(json_str.into_pyobject(py)?.into_any())

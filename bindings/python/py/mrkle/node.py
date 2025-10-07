@@ -1,21 +1,23 @@
 from __future__ import annotations
 
 from array import array
+from typing_extensions import override
 
 from mrkle.crypto import new
 from mrkle.crypto.typing import Digest
 
-from mrkle.typing import D as _D, Buffer, SLOT_T
+from mrkle.typing import BufferLike as Buffer
 
 from mrkle._tree import Node_T, NODE_MAP
 
-from typing import Generic, Union, Optional, cast
+from typing import Union, Optional, final
 
 
 __all__ = ["MrkleNode"]
 
 
-class MrkleNode(Generic[_D]):
+@final
+class MrkleNode:
     """A generic Merkle tree node.
 
     This class provides an immutable Python interface for Merkle tree nodes
@@ -27,31 +29,24 @@ class MrkleNode(Generic[_D]):
         _inner (Node): The underlying Rust-based Merkle node instance.
         _dtype (str): The name of the digest algorithm used by this node.
 
-    Type Parameters:
-        D: Digest type used for hashing (e.g., Sha1, Sha256).
+
+    Examples:
+        >>> from mrkle.tree import MrkleTree
+        >>> tree = MrkleTree.from_leaves(["a", "b", "c"])
+        >>> node = tree[0]
+        >>>
     """
 
     _inner: Node_T
-    _dtype: str
-    __slots__: SLOT_T = ("_inner", "_dtype")
+    _dtype_name: str
+    __slots__ = ("_inner", "_dtype_name")
 
-    def __init__(self, node: Node_T) -> None:
-        raise TypeError(
-            f"Cannot instantiate {self.__class__.__name__} directly. "
-            "Use MrkleNode.leaf(...) to create leaf nodes."
-        )
+    def __init__(self, node: Node_T, *args, **kwargs) -> None:
+        self._inner = node
+        self._dtype_name = node.dtype().name()
 
     @classmethod
-    def construct_from_node(cls, node: Node_T) -> MrkleNode[_D]:
-        """Construct MrkleNode from internal Node type."""
-        dtype: Digest = node.dtype()
-        obj = object.__new__(cls)
-        object.__setattr__(obj, "_inner", node)
-        object.__setattr__(obj, "_dtype", dtype.name())
-        return obj
-
-    @classmethod
-    def __construct_node_backend(cls, node: Node_T, dtype: Digest) -> "MrkleNode[_D]":
+    def construct_from_node(cls, node: Node_T) -> MrkleNode:
         """Internal method to create a MrkleNode instance bypassing __init__.
 
         Args:
@@ -59,18 +54,12 @@ class MrkleNode(Generic[_D]):
             digest (_D): The digest object used for this node.
 
         Returns:
-            MrkleNode[_D]: A new instance wrapping the given inner node.
+            MrkleNode: A new instance wrapping the given inner node.
 
-        Rasied:
-            AssertionError: If the node's digest type doesn't match the
-                provided digest type.
         """
-        assert (
-            node.dtype() == dtype
-        ), f"Missmatch {node.dtype():!s} does not match {dtype:!s}"
         obj = object.__new__(cls)
         object.__setattr__(obj, "_inner", node)
-        object.__setattr__(obj, "_dtype", dtype.name())
+        object.__setattr__(obj, "_dtype_name", node.dtype().name())
         return obj
 
     def value(self) -> Optional[bytes]:
@@ -88,7 +77,7 @@ class MrkleNode(Generic[_D]):
     @classmethod
     def leaf(
         cls, data: Union[Buffer, str], *, name: Optional[str] = None
-    ) -> "MrkleNode[_D]":
+    ) -> "MrkleNode":
         """Create a leaf node from input data.
 
         Args:
@@ -96,7 +85,7 @@ class MrkleNode(Generic[_D]):
             name: The digest algorithm name (default: "sha1").
 
         Returns:
-            MrkleNode[_D]: A new leaf node containing the hashed value.
+            MrkleNode: A new leaf node containing the hashed value.
 
         Raises:
             ValueError: Raised when the digest algorithm is not supported.
@@ -119,7 +108,6 @@ class MrkleNode(Generic[_D]):
             except (TypeError, ValueError) as e:
                 raise TypeError(
                     f"Cannot convert {type(data).__name__} to bytes. "
-                    f"Expected str, bytes, bytearray, memoryview, or array."
                 ) from e
 
         digest: Digest = new(name, data=buffer)
@@ -127,7 +115,7 @@ class MrkleNode(Generic[_D]):
 
         if inner := NODE_MAP.get(name.lower()):
             node: Node_T = inner.leaf_with_digest(buffer, value)
-            return cls.__construct_node_backend(node, digest)
+            return cls.construct_from_node(node)
         else:
             raise ValueError(
                 f"{name} is not digested that a supported with in MrkleNode."
@@ -141,19 +129,26 @@ class MrkleNode(Generic[_D]):
         """
         return self._inner.is_leaf()
 
-    def dtype(self) -> _D:
+    def dtype(self) -> Digest:
         """Return the digest object used."""
-        return cast(_D, new(self._dtype))
+        return new(self._dtype_name)
 
-    def __setattr__(self, name: str, value) -> None:
+    @override
+    def __setattr__(self, name: str, value: object) -> None:
         """Prevent setting attributes to enforce immutability.
 
         Raises:
             AttributeError: Always, since MrkleNode objects are immutable.
         """
+        if name in {"_inner", "_dtype_name"}:
+            if getattr(self, name, None) is None:
+                object.__setattr__(self, name, value)
+                return
+            raise AttributeError(f"{name!r} is immutable once set")
 
-        raise AttributeError(f"{repr(self)} objects are immutable")
+        raise AttributeError(f"{self.__class__.__name__!r} objects are immutable")
 
+    @override
     def __delattr__(self, name: str) -> None:
         """Prevent deleting attributes to enforce immutability.
 
@@ -162,14 +157,16 @@ class MrkleNode(Generic[_D]):
         """
         raise AttributeError(f"{repr(self)} objects are immutable")
 
+    @override
     def __repr__(self) -> str:
         """Return the canonical string representation of the node.
 
         Returns:
             str: Representation including the digest type and object id.
         """
-        return f"<{self._dtype} mrkle.tree.MrkleNode object at {hex(id(self))}>"
+        return f"<{self._dtype_name} mrkle.tree.MrkleNode object at {hex(id(self))}>"
 
+    @override
     def __str__(self) -> str:
         """Return a human-readable string representation of the node.
 
@@ -179,9 +176,10 @@ class MrkleNode(Generic[_D]):
         id: str = self._inner.hexdigest()
         return (
             f"MrkleNode(id={id[0 : min(len(id), 4)]}, "
-            f"leaf={self.is_leaf()}, dtype={self._dtype.capitalize()}())"
+            f"leaf={self.is_leaf()}, dtype={self._dtype_name})"
         )
 
+    @override
     def __eq__(self, other: object) -> bool:
         """Check equality between two MrkleNode instances.
 
@@ -197,6 +195,7 @@ class MrkleNode(Generic[_D]):
             return False
         return self._inner == other._inner
 
+    @override
     def __hash__(self) -> int:
         """Compute the hash of the node for use in sets or dict keys."""
         return hash(self.digest())

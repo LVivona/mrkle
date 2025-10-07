@@ -1,37 +1,36 @@
 from __future__ import annotations
 
-from collections.abc import Iterator, Sequence, Iterable
+from collections.abc import Iterator, Sequence
 from typing import (
     Any,
-    Generic,
     Literal,
     Union,
     Optional,
     final,
     overload,
 )
-from typing_extensions import TypeAlias, override
+from typing_extensions import override
 
 from mrkle.crypto import new
 from mrkle.crypto.typing import Digest
 
 from mrkle.utils import unflatten
-from mrkle.typing import D as _D, Buffer, SLOT_T
+from mrkle.typing import BufferLike as Buffer
 
 from mrkle.iter import MrkleTreeIter
 from mrkle.node import MrkleNode
 
-from mrkle.errors import MerkleError, ProofError, SerdeError, TreeError
+from mrkle.errors import MerkleError, SerdeError, TreeError
 
 from mrkle._proof import Proof_T, PROOF_MAP
 from mrkle._tree import Node_T, Tree_T, TREE_MAP
 
 
-__all__ = ["MrkleTree", "MrkleProof", "Tree"]
+__all__ = ["MrkleTree", "MrkleProof"]
 
 
 @final
-class MrkleTree(Generic[_D]):
+class MrkleTree:
     """A generic Merkle tree.
 
     This class provides an immutable Python interface for Merkle trees
@@ -40,37 +39,28 @@ class MrkleTree(Generic[_D]):
     from leaf data with the appropriate digest.
 
     Attributes:
-        _inner (TreeT): The underlying Rust-based Merkle tree instance.
-        _dtype (Digest): The digest algorithm instance used by this tree.
+        _inner (Tree_T): The underlying Rust-based Merkle tree instance.
 
     Examples:
         >>> from mrkle.tree import MrkleTree
         >>> tree = MrkleTree.from_leaves([b"data1", b"data2"], name="sha256")
         >>> tree.root().hex()
-        '5b6d4b08...'
+        '5b6d4b089e2331b3e00a803326df50cdc2df81c7df405abea149421df227640b'
         >>> len(tree)
         3
     """
 
     _inner: Tree_T
-    _dtype: Digest
-    __slots__: SLOT_T = ("_inner", "_dtype")
+    __slots__ = "_inner"
 
     def __init__(self, tree: Tree_T) -> None:
         """Initialize a MrkleTree instance.
 
-        Warning:
-            Users should not call this constructor directly. Use the
-            `from_leaves` class method instead.
-
         Args:
-            tree (TreeT): The underlying Rust-based tree instance.
+            tree (Tree_T): The underlying Rust-based tree instance.
 
-        Raises:
-            TypeError: If instantiated directly by users.
         """
         self._inner = tree
-        self._dtype = tree.dtype()
 
     def root(self) -> Optional[bytes]:
         """Return the root hash as a hexadecimal string.
@@ -93,11 +83,11 @@ class MrkleTree(Generic[_D]):
         except TreeError:
             return None
 
-    def leaves(self) -> list["MrkleNode[_D]"]:
+    def leaves(self) -> list["MrkleNode"]:
         """Return a list of all leaf nodes in the tree.
 
         Returns:
-            list[MrkleNode[_D]]: A list containing all leaf nodes with the
+            list[MrkleNode]: A list containing all leaf nodes with the
                 same digest type as the tree.
 
         Examples:
@@ -116,7 +106,7 @@ class MrkleTree(Generic[_D]):
         )
 
     @staticmethod
-    def _construct_mrkle_node(inner: Node_T) -> "MrkleNode[_D]":
+    def _construct_mrkle_node(inner: Node_T) -> "MrkleNode":
         return MrkleNode.construct_from_node(inner)
 
     def is_empty(self) -> bool:
@@ -135,7 +125,7 @@ class MrkleTree(Generic[_D]):
             >>> digest.name()
             'sha256'
         """
-        return self._dtype
+        return self._inner.dtype()
 
     def capacity(self) -> int:
         """Return the allocation capacity of the internal tree structure.
@@ -152,9 +142,8 @@ class MrkleTree(Generic[_D]):
     def from_leaves(
         cls,
         leaves: Union[Sequence[Union[Buffer, str]], Iterator[Union[Buffer, str]]],
-        *,
         name: Optional[str] = None,
-    ) -> "MrkleTree[_D]":
+    ) -> "MrkleTree":
         """Construct a Merkle tree from a list of leaf data.
 
         This is the basic way to create a MrkleTree instance. The method
@@ -162,13 +151,14 @@ class MrkleTree(Generic[_D]):
         specified digest algorithm, and constructs a complete Merkle tree.
 
         Args:
-            leaves (Sequence[Union[Buffer, str]]): A list of data to be used as
-                leaf nodes. Strings will be UTF-8 encoded to bytes.
+            leaves (Union[Sequence[Union[Buffer, str]], Iterator[Union[Buffer, str]]]):
+                A list of data to be used as leaf nodes.
+                Strings will be UTF-8 encoded to bytes.
             name (Optional[str], optional): The digest algorithm name
                 (e.g., "sha1", "sha256", "blake2b"). Defaults to "sha1".
 
         Returns:
-            MrkleTree[_D]: A new Merkle tree instance containing the provided
+            MrkleTree: A new Merkle tree instance containing the provided
                 leaves hashed with the specified digest algorithm.
 
         Raises:
@@ -177,6 +167,7 @@ class MrkleTree(Generic[_D]):
                 provided digest type.
 
         Examples:
+            >>> from mrkle.tree import MrkleTree
             >>> # Create tree with default SHA-1
             >>> tree = MrkleTree.from_leaves([b"a", b"b", b"c"])
             >>>
@@ -192,7 +183,7 @@ class MrkleTree(Generic[_D]):
         name = digest.name()
 
         if inner := TREE_MAP.get(name):
-            return cls._construct_tree_backend(inner.from_leaves(leaves), digest)
+            return cls._construct_tree_backend(inner.from_leaves(leaves))
         else:
             raise ValueError(
                 f"{name} is not a digest algorithm supported by MrkleTree."
@@ -200,21 +191,21 @@ class MrkleTree(Generic[_D]):
 
     def generate_proof(
         self,
-        leaves: Union[int, Iterable[int]],
-    ) -> "MrkleProof[_D]":
+        leaves: Union[int, slice, Sequence[int]],
+    ) -> "MrkleProof":
         """Generate a Merkle proof for the specified leaf nodes.
 
         Args:
-            leaves (Set[MrkleNode[_D]]): A set of leaf nodes to generate
+            leaves (Set[MrkleNode]): A set of leaf nodes to generate
                 a proof for.
 
         Returns:
-            MrkleProof[_D]: A Merkle proof object that can verify the
+            MrkleProof: A Merkle proof object that can verify the
                 inclusion of the specified leaves in this tree.
 
         Examples:
             >>> tree = MrkleTree.from_leaves([b"a", b"b", b"c"])
-            >>> proof = tree.generate_proof([0])
+            >>> proof = tree.generate_proof(0)
         """
         return MrkleProof.generate(self, leaves)
 
@@ -244,7 +235,7 @@ class MrkleTree(Generic[_D]):
         name: Optional[str] = None,
         *,
         encoding: Optional[Literal["json", "cbor"]] = None,
-    ) -> "MrkleTree[_D]":
+    ) -> "MrkleTree":
         """Deserialize a tree from string (JSON) or bytes (CBOR).
 
         Args:
@@ -252,7 +243,7 @@ class MrkleTree(Generic[_D]):
             encoding: Serialization format used. Defaults to "cbor".
 
         Returns:
-            MrkleTree[_D]: Deserialized tree instance.
+            MrkleTree: Deserialized tree instance.
 
         Raised:
             ValueError: Raised when the specified digest algorithm is not
@@ -307,11 +298,11 @@ class MrkleTree(Generic[_D]):
         name: Optional[str] = None,
         *,
         fmt: Literal["flatten", "nested"] = "nested",
-    ) -> "MrkleTree[_D]":
+    ) -> "MrkleTree":
         """Construct a MrkleTree from a dict.
 
         Returns:
-            MrkleTree[_D]: A new tree instance built from the given dictionary data.
+            MrkleTree: A new tree instance built from the given dictionary data.
 
         Raised:
             ValueError: Raised when the specified digest algorithm is not
@@ -339,36 +330,30 @@ class MrkleTree(Generic[_D]):
             data = unflatten(data)
 
         if inner := TREE_MAP.get(name):
-            return cls._construct_tree_backend(inner.from_dict(data=data), digest)
+            return cls._construct_tree_backend(inner.from_dict(data=data))
         else:
             raise ValueError(
                 f"{name} is not a digest algorithm supported by MrkleTree."
             )
 
     @classmethod
-    def _construct_tree_backend(cls, tree: Tree_T, dtype: Digest) -> "MrkleTree[_D]":
+    def _construct_tree_backend(cls, tree: Tree_T) -> "MrkleTree":
         """Internal method to create a MrkleTree instance bypassing __init__.
 
         This method is used internally to construct tree instances with
         pre-validated components, avoiding the normal initialization path.
 
         Args:
-            tree (TreeT): The underlying Rust-based tree instance.
+            tree (Tree_T): The underlying Rust-based tree instance.
             dtype (Digest): The digest algorithm instance.
 
         Returns:
-            MrkleTree[_D]: A new tree instance wrapping the given components.
+            MrkleTree: A new tree instance wrapping the given components.
 
-        Raises:
-            AssertionError: If the tree's digest type doesn't match the
-                provided digest type.
         """
-        assert (
-            tree.dtype() == dtype
-        ), f"Mismatch: {tree.dtype()!s} does not match {dtype!s}"
+
         obj = object.__new__(cls)
         object.__setattr__(obj, "_inner", tree)
-        object.__setattr__(obj, "_dtype", dtype)
         return obj
 
     @classmethod
@@ -376,7 +361,7 @@ class MrkleTree(Generic[_D]):
         cls,
         data: Union[str, bytes],
         encoding: Optional[Literal["json", "cbor"]] = None,
-    ) -> "MrkleTree[_D]":
+    ) -> "MrkleTree":
         """Internal method to find the correct tree type and deserialize.
 
         Args:
@@ -384,7 +369,7 @@ class MrkleTree(Generic[_D]):
             encoding: Serialization format used.
 
         Returns:
-            MrkleTree[_D]: Deserialized tree instance.
+            MrkleTree: Deserialized tree instance.
 
         Raises:
             SerdeError: If deserialization fails for all tree types.
@@ -392,11 +377,10 @@ class MrkleTree(Generic[_D]):
             provided digest type.
         """
 
-        for name, tree in TREE_MAP.items():
+        for tree in TREE_MAP.values():
             try:
                 inner = tree.loads(data, encoding=encoding)
-                digest = new(name)
-                return cls._construct_tree_backend(inner, digest)
+                return cls._construct_tree_backend(inner)
             except AssertionError as e:
                 # NOTE: this only should thrown when the
                 # construct does not match the inner backend
@@ -411,19 +395,19 @@ class MrkleTree(Generic[_D]):
         raise SerdeError("Could not deserialize tree from given data.")
 
     @overload
-    def __getitem__(self, key: slice) -> list[MrkleNode[_D]]: ...
+    def __getitem__(self, key: slice) -> list[MrkleNode]: ...
 
     @overload
-    def __getitem__(self, key: Sequence[int]) -> list[MrkleNode[_D]]: ...
+    def __getitem__(self, key: Sequence[int]) -> list[MrkleNode]: ...
 
-    def __getitem__(self, key: Union[int, slice, Sequence[int]]) -> list[MrkleNode[_D]]:
+    def __getitem__(self, key: Union[int, slice, Sequence[int]]) -> list[MrkleNode]:
         """Access nodes by index, slice, or sequence of indices.
 
         Args:
             key (Union[int, slice, Sequence[int]]): The index specification.
 
         Returns:
-            list[MrkleNode[_D]]: A list of nodes at the specified indices.
+            list[MrkleNode]: A list of nodes at the specified indices.
 
         Raises:
             TypeError: Rasied if the key type is invalid.
@@ -432,20 +416,20 @@ class MrkleTree(Generic[_D]):
         """
         return self._inner[key]
 
-    def __iter__(self) -> "MrkleTreeIter[_D]":
+    def __iter__(self) -> "MrkleTreeIter":
         """Return an iterator over all nodes in the tree.
 
         The iteration is performed in breadth-first order.
 
         Returns:
-            MrkleTreeIter[_D]: An iterator over tree nodes.
+            MrkleTreeIter: An iterator over tree nodes.
 
         Examples:
             >>> tree = MrkleTree.from_leaves([b"a", b"b"])
             >>> for node in tree:
             ...     print(node.hexdigest())
         """
-        return MrkleTreeIter.from_tree(self._inner, self._dtype)
+        return MrkleTreeIter.from_tree(self._inner)
 
     def __len__(self) -> int:
         """Return the total number of nodes in the tree.
@@ -479,6 +463,9 @@ class MrkleTree(Generic[_D]):
             >>> tree2 = MrkleTree.from_leaves([b"a", b"b"])
             >>> tree1 == tree2
             True
+            >>> tree3 = MrkleTree.from_leaves([b"a", b"b"], name="sha224")
+            >>> tree1 == tree3
+            False
         """
         if not isinstance(other, MrkleTree):
             return NotImplemented
@@ -509,7 +496,10 @@ class MrkleTree(Generic[_D]):
             >>> repr(tree)
             '<sha256 mrkle.tree.MrkleTree object at 0x...>'
         """
-        return f"<{self._dtype.name()} mrkle.tree.MrkleTree object at {hex(id(self))}>"
+        return (
+            f"<{self._inner.dtype().name()} mrkle.tree.MrkleTree "
+            f"object at {hex(id(self))}>"
+        )
 
     @override
     def __str__(self) -> str:
@@ -522,12 +512,12 @@ class MrkleTree(Generic[_D]):
         Examples:
             >>> tree = MrkleTree.from_leaves([b"a", b"b"])
             >>> str(tree)
-            'MrkleTree(root=0056, length=3, dtype=Sha1())'
+            'MrkleTree(root=0056, length=3, dtype=sha1)'
         """
         root: str = self._inner.root().hex()
         return (
             f"MrkleTree(root={root[0 : min(len(root), 4)]},"
-            f" length={len(self)}, dtype={self._dtype!s})"
+            f" length={len(self)}, dtype={self._inner.dtype().name()!s})"
         )
 
     @override
@@ -544,7 +534,7 @@ class MrkleTree(Generic[_D]):
 
 
 @final
-class MrkleProof(Generic[_D]):
+class MrkleProof:
     """A generic Merkle proof.
 
     Provides utilities to create and verify Merkle proofs. A Merkle
@@ -557,20 +547,20 @@ class MrkleProof(Generic[_D]):
         >>> from mrkle.proof import MerkleProof
         >>> leaves = [b'leaf1', b'leaf2', b'leaf3']
         >>> tree = MrkleTree.from_leaves(leaves)
-        >>> proof = tree.generate_proof([0])
+        >>> proof = tree.generate_proof(0)
         >>> str(proof)
-        'MrkleProof(expected=70a6, length=5, dtype=Sha1())'
+        'MrkleProof(expected=70a6, length=5, dtype=sha1)'
 
     """
 
     _inner: Proof_T
-    _dtype: Digest
+    _dtype_name: str
 
-    __slots__: SLOT_T = ("_inner", "_dtype")
+    __slots__ = ("_inner", "_dtype_name")
 
     def __init__(self, proof: Proof_T) -> None:
         self._inner = proof
-        self._dtype = proof.dtype()
+        self._dtype_name = proof.dtype().name()
 
     def expected(self) -> bytes:
         """Returns the expected hash of the proof."""
@@ -582,8 +572,8 @@ class MrkleProof(Generic[_D]):
 
     @classmethod
     def generate(
-        cls, tree: "MrkleTree[_D]", leaves: Union[int, Iterable[int]]
-    ) -> "MrkleProof[_D]":
+        cls, tree: "MrkleTree", leaves: Union[int, slice, Sequence[int]]
+    ) -> "MrkleProof":
         """Generate MrkleProof from MrkleTree, and leaf index."""
         name = tree.dtype().name()
         proof = PROOF_MAP.get(name)
@@ -591,13 +581,10 @@ class MrkleProof(Generic[_D]):
             raise ValueError(
                 f"{name!r} is not a digest algorithm supported by MrkleTree."
             )
-
         if isinstance(leaves, int):
-            leaf_indices = [leaves]
-        else:
-            leaf_indices = list(leaves)
+            leaves = [leaves]
 
-        return cls(proof.generate(tree, leaf_indices))
+        return cls(proof.generate(tree, leaves))
 
     def update(self, leaves: Union[bytes, list[bytes], str, list[str]]) -> None:
         """Update the proof with new leaf values.
@@ -607,7 +594,7 @@ class MrkleProof(Generic[_D]):
 
         Examples:
             >>> tree = MrkleTree.from_leaves([b"a", b"b"])
-            >>> proof = tree.generate_proof([0])
+            >>> proof = tree.generate_proof(0)
             >>> leaf = tree.leaves()[0]
             >>> proof.update(leaf.digest())
             >>> proof.validate()
@@ -622,12 +609,15 @@ class MrkleProof(Generic[_D]):
             bool: True if the proof is valid, False otherwise.
 
         Examples:
+            >>> from mrkle.tree import MrkleTree
+            >>>
             >>> tree = MrkleTree.from_leaves([b"a", b"b"], name="sha256")
-            >>> proof = tree.generate_proof([0])
+            >>> proof = tree.generate_proof(0)
             >>> leaf = tree.leaves()[1]
             >>> proof.update(leaf.digest())
             >>> proof.validate()
             False
+            >>>
             >>> proof.refresh()
             >>> leaf = tree.leaves()[0]
             >>> proof.update(leaf.digest())
@@ -639,10 +629,7 @@ class MrkleProof(Generic[_D]):
 
     def try_validate(self) -> bool:
         """Validate this proof against a given root hash, return exception if false."""
-        try:
-            return self._inner.try_validate()
-        except ProofError as e:
-            raise e
+        return self._inner.try_validate()
 
     def refresh(self) -> None:
         """Reset this proof."""
@@ -654,7 +641,7 @@ class MrkleProof(Generic[_D]):
         Returns:
             Digest: The digest algorithm instance (e.g., Sha1(), Sha256()).
         """
-        return self._dtype
+        return new(self._dtype_name)
 
     def to_string(self) -> str:
         """Pretty print of MrkleProof.
@@ -671,7 +658,7 @@ class MrkleProof(Generic[_D]):
         self,
         encoding: Optional[Literal["json", "cbor"]] = None,
         **kwargs: dict[str, Any],
-    ) -> Union[str, bytes]:
+    ) -> bytes:
         """Serialize a tree into json string or cbor bytes.
 
         Args:
@@ -681,7 +668,9 @@ class MrkleProof(Generic[_D]):
             ValueError: Raised when unable to convert into proper encoding type.
             SerdeError: Raised when the data cannot be deserialized into a valid object.
         """
-        return self._inner.dumps(encoding=encoding, **kwargs)
+        if encoding is None:
+            encoding = "cbor"
+        return self._inner.dumps(encoding)
 
     @classmethod
     def loads(
@@ -690,19 +679,23 @@ class MrkleProof(Generic[_D]):
         encoding: Optional[Literal["json", "cbor"]] = None,
         *,
         name: Optional[str] = None,
-    ) -> "MrkleProof[_D]":
-        """Deserialize a tree from string (JSON) or bytes (CBOR).
+    ) -> "MrkleProof":
+        """Deserialize a Merkle Tree from a string (JSON) or bytes (CBOR).
 
         Args:
-            data: Serialized tree data (str for JSON, bytes for CBOR).
-            encoding: Serialization format used. Defaults to "cbor".
+            data (str | bytes): Serialized tree data.
+                - Use ``str`` for JSON-encoded input.
+                - Use ``bytes`` for CBOR-encoded input.
+            encoding (str, optional): Serialization format.
+                Must be either ``"json"`` or ``"cbor"``. Defaults to ``"cbor"``.
+            name (str, optional): Name of the digest algorithm used for hashing.
 
         Returns:
-            MrkleProof[_D]: Deserialized merkle proof tree instance.
+            MrkleTree: Deserialized Merkle Tree instance.
 
         Raises:
-            ValueError: Raised when unable to convert into proper encoding type.
-            SerdeError: Raised when the data cannot be deserialized into a valid object.
+            ValueError: If the input cannot be interpreted as the specified encoding type.
+            SerdeError: If deserialization fails or the data is invalid.
 
         Examples:
             >>> tree = MrkleTree.from_leaves([b"a", b"b"], name="sha256")
@@ -727,15 +720,15 @@ class MrkleProof(Generic[_D]):
         cls,
         data: Union[str, bytes],
         encoding: Optional[Literal["json", "cbor"]] = None,
-    ) -> "MrkleProof[_D]":
+    ) -> "MrkleProof":
         """Internal method to find the correct tree type and deserialize.
 
         Args:
-            data: Serialized tree data.
-            encoding: Serialization format used.
+            data(str | bytes): Serialized tree data.
+            encoding(str, optional) Serialization format used.
 
         Returns:
-            MrkleProof[_D]: Deserialized tree instance.
+            MrkleProof: Deserialized tree instance.
 
         Raises:
             SerdeError: Raised when deserialization fails for all tree types.
@@ -765,7 +758,7 @@ class MrkleProof(Generic[_D]):
             >>> repr(tree)
             '<sha256 mrkle.tree.MrkleTree object at 0x...>'
         """
-        return f"<{self._dtype.name()} mrkle.tree.MrkleProof object at {hex(id(self))}>"
+        return f"<{self._dtype_name} mrkle.tree.MrkleProof object at {hex(id(self))}>"
 
     @override
     def __str__(self) -> str:
@@ -778,15 +771,15 @@ class MrkleProof(Generic[_D]):
         Examples:
             >>> tree = MrkleTree.from_leaves([b"a", b"b"])
             >>> leaf = tree.leaves()[0]
-            >>> proof = tree.generate_proof([0])
+            >>> proof = tree.generate_proof(0)
             >>> str(tree)
-            'MrkleProof(root=ce7a, length=3, dtype=Sha1())'
+            'MrkleProof(root=ce7a, length=3, dtype=sha1)'
         """
 
         root: str = self._inner.expected_hexdigest()
         return (
             f"MrkleProof(expected={root[0 : min(len(root), 4)]},"
-            f" length={len(self)}, dtype={self._dtype!s})"
+            f" length={len(self)}, dtype={self._dtype_name!s})"
         )
 
     @override
@@ -800,6 +793,3 @@ class MrkleProof(Generic[_D]):
             str: The formatted string representation.
         """
         return super().__format__(format_spec)
-
-
-Tree: TypeAlias = MrkleTree[_D]

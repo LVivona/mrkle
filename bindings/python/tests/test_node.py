@@ -96,8 +96,8 @@ def test_leaf_with_empty_unicode():
 
 # Node comparison tests
 def test_different_node_type():
-    node_sha1: MrkleNode[Sha1] = MrkleNode.leaf("Hello world")
-    node_sha224: MrkleNode[Sha224] = MrkleNode.leaf("Hello world", name="sha224")
+    node_sha1 = MrkleNode.leaf("Hello world")
+    node_sha224 = MrkleNode.leaf("Hello world", name="sha224")
     assert node_sha1 != node_sha224
     assert node_sha1.dtype() != node_sha224.dtype()
 
@@ -315,7 +315,7 @@ def test_all_blake_variants():
 # Invalid input tests
 def test_invalid_digest_name():
     with pytest.raises(ValueError):
-        MrkleNode.leaf("test", name="invalid_digest")
+        _ = MrkleNode.leaf("test", name="invalid_digest")
 
 
 def test_invalid_digest_name_case_insensitive():

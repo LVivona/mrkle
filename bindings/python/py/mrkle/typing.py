@@ -1,42 +1,37 @@
-from array import array
 import sys
-from typing import Union, runtime_checkable, Protocol, TypeVar, Literal
+from typing import Union, runtime_checkable, Protocol
 from typing_extensions import TypeAlias
-
-from mrkle.crypto.typing import Digest
 
 if sys.version_info >= (3, 12):
     # Buffer protocol is available in Python 3.12+
-    from collections.abc import Buffer as ByteBuffer
+    from collections.abc import Buffer
 
-    Buffer: TypeAlias = ByteBuffer
+    BufferLike: TypeAlias = Buffer
 else:
-    # Fallback for older Python versions
-    @runtime_checkable
-    class SupportsBytes(Protocol):
-        """Protocol for objects that support conversion to bytes."""
 
-        def __bytes__(self) -> bytes:
-            """Convert the object to bytes."""
+    @runtime_checkable
+    class Buffer(Protocol):
+        """Protocol for objects that support the buffer protocol.
+
+        This is a backport of collections.abc.Buffer for Python < 3.12.
+        """
+
+        def __buffer__(self, flags: int, /) -> memoryview:
+            """Return a buffer object that exposes the underlying memory."""
             ...
 
-    Buffer: TypeAlias = Union[
+        def __release_buffer__(self, buffer: memoryview, /) -> None:
+            """Release the buffer object."""
+            ...
+
+    BufferLike: TypeAlias = Union[
         bytes,
         bytearray,
         memoryview,
-        array,
-        SupportsBytes,
+        Buffer,
     ]
-
-# Internal Rust Digest type trait.
-D = TypeVar("D", bound=Digest)
-
-# __slot types for internal use of generic classes.
-SLOT_T = tuple[Literal["_inner"], Literal["_dtype"]]
 
 
 __all__ = [
-    "SLOT_T",
-    "D",
-    "Buffer",
+    "BufferLike",
 ]

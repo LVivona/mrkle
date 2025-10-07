@@ -458,7 +458,7 @@ macro_rules! py_mrkle_tree {
                 &self,
                 py: Python<'py>,
                 key: PyBound<'py, PyAny>,
-            ) -> PyResult<PyBound<'py, PyList>> {
+            ) -> PyResult<PyBound<'py, PyAny>> {
                 let module = PyModule::import(py, intern!(py, "mrkle"))?;
                 MRKLE_MODULE.get_or_init_py_attached(py, || module.clone().unbind());
                 let node_cls = module.getattr(intern!(py, "MrkleNode"))?;
@@ -486,7 +486,7 @@ macro_rules! py_mrkle_tree {
                         (value.clone(),),
                     )?;
 
-                    return PyList::new(py, &[py_node]);
+                    return Ok(py_node);
                 }
 
                 if let Ok(slice) = key.extract::<PyBound<'_, PySlice>>() {
@@ -507,9 +507,8 @@ macro_rules! py_mrkle_tree {
                         i += step;
                     }
 
-                    return PyList::new(py, &out);
+                    return Ok(PyList::new(py, &out)?.into_any());
                 }
-
                 if let Ok(seq) = key.extract::<PyBound<'_, PySequence>>() {
                     let mut out = Vec::new();
 
@@ -537,7 +536,7 @@ macro_rules! py_mrkle_tree {
                         }
                     }
 
-                    return PyList::new(py, &out);
+                    return Ok(PyList::new(py, &out)?.into_any());
                 }
 
                 Err(PyTypeError::new_err(
@@ -576,16 +575,14 @@ macro_rules! py_mrkle_tree {
                 format!("{}", self.inner)
             }
 
-            #[pyo3(text_signature = "(encoding : Optional[Literal['json', 'codec']] = None, **kwargs)")]
             fn dumps<'py>(
                 &self,
                 py: Python<'py>,
                 encoding: Option<Codec>,
-                _kwargs: PyBound<'_, PyDict>,
             ) -> PyResult<Bound<'py, PyAny>> {
                 match encoding {
                     Some(Codec::JSON) => {
-                        let json_str = serde_json::to_string(&self).map_err(|e| {
+                        let json_str = serde_json::to_vec(&self).map_err(|e| {
                             SerdeError::new_err(format!("JSON serialization error: {}", e))
                         })?;
                         Ok(json_str.into_pyobject(py)?.into_any())
@@ -600,11 +597,10 @@ macro_rules! py_mrkle_tree {
             }
 
             #[staticmethod]
-            #[pyo3(text_signature = "(data : bytes, encoding : Optional[Literal['json', 'codec']] = None, **kwargs)")]
+            #[pyo3(text_signature = "(data : bytes, encoding : Optional[Literal['json', 'codec']] = None)")]
             fn loads(
                 data: &Bound<'_, PyAny>,
                 encoding: Option<Codec>,
-                _kwargs: PyBound<'_, PyDict>,
             ) -> PyResult<Self> {
                 let bytes = data.extract::<&[u8]>()?;
 
