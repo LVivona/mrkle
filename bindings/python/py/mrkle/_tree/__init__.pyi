@@ -4,7 +4,7 @@ from collections.abc import Sequence
 from typing import Any, Dict, Final, Iterator, Protocol, Union, Literal, Optional
 from mrkle.crypto.typing import Digest
 from typing_extensions import TypeAlias
-from mrkle.typing import D as _D, Buffer
+from mrkle.typing import Buffer
 
 class _MrkleTreeBase(Protocol):
     """Base protocol for Merkle tree implementations."""
