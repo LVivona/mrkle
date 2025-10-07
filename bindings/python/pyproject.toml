@@ -27,6 +27,7 @@ dynamic = ["version"]
 authors = [
     {name = 'Luca Vivona', email = "lucavivona01@gmail.com"}
 ]
+description = "A fast and flexible Merkle Tree library."
 
 [project.optional-dependencies]
 quality = [
@@ -42,13 +43,14 @@ testing = [
 ]
 dev = [
     "mrkle[quality]",
-    "mrkle[testing]"
+    "mrkle[testing]",
+    "Sphinx>=7.4.7"
 ]
 
 [project.urls]
-Homepage = 'https://github.com/LVivona/mrkle'
+Homepage = 'https://mrkle.org'
+Documentation = "https://docs.mrkle.org"
 Source = 'https://github.com/LVivona/mrkle'
-repository = "https://github.com/LVivona/mrkle"
 
 [tool.maturin]
 python-source = "py"
