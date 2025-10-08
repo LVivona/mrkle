@@ -13,19 +13,15 @@ class _MrkleTreeBase(Protocol):
     def root(self) -> bytes:
         """Return the root hash as a hex string."""
         ...
-
     def is_empty(self) -> bool:
         """Check if the tree is empty."""
         ...
-
     def capacity(self) -> int:
         """Return the capacity of the tree."""
         ...
-
     def __len__(self) -> int:
         """Return the number of nodes in the tree."""
         ...
-
     @override
     def __repr__(self) -> str: ...
     @override
@@ -34,7 +30,6 @@ class _MrkleTreeBase(Protocol):
     def to_string(self) -> str:
         """Return a string representation of the tree structure."""
         ...
-
     def dumps(
         self, encoding: Optional[Literal["json", "cbor"]], **kwargs: dict[str, Any]
     ) -> bytes: ...
