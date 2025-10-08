@@ -124,6 +124,22 @@ macro_rules! py_mrkle_node {
                 <$digest>::new()
             }
 
+            #[pyo3(name = "parent")]
+            fn parent_index(&self) -> PyResult<Option<usize>> {
+                Ok(self.inner.parent().map(|parent| parent.index()))
+            }
+
+            #[inline]
+            #[pyo3(name = "children")]
+            fn children_indices(&self) -> PyResult<Vec<usize>> {
+                Ok(self
+                    .inner
+                    .children()
+                    .iter()
+                    .map(|node| node.index())
+                    .collect())
+            }
+
             fn value(&self) -> Option<&[u8]> {
                 self.inner.value().map(|value| value.as_ref())
             }
@@ -349,6 +365,7 @@ macro_rules! py_mrkle_tree {
                 Ok(self.inner.try_root().map_err(|e| TreeError::new_err(format!("{e}")))?.hash())
             }
 
+
             #[inline]
             pub fn is_empty(&self) -> bool {
                 self.inner.is_empty()
@@ -483,43 +500,9 @@ macro_rules! py_mrkle_tree {
                         .get(idx)
                         .ok_or_else(|| PyIndexError::new_err("index out of range"))?;
 
-                    // Convert the parent node to a Python object before the closure
-                    let parent: Option<usize> = value.parent()
-                        .map(|p| p.index());
-
-                    // Create a PyCFunction that wraps the parent hook
-                    let parent_hook = PyCFunction::new_closure(
-                        py,
-                        None,
-                        None,
-                        move |_args: &Bound<'_, PyTuple>, _kwargs: Option<&Bound<'_, PyDict>>| -> PyResult<Option<usize>> {
-                            Ok(parent)
-                        },
-                    )?;
-
-
-
-                     let kwargs = PyDict::new(py);
-                    kwargs.set_item("_parent_callback", parent_hook)?;
-
-                    let children : Vec<usize> = value.children().iter().map(|idx| idx.index()).collect();
-                    if !children.is_empty() {
-                        let children_hook = PyCFunction::new_closure(
-                            py,
-                            None,
-                            None,
-                            move |_args: &Bound<'_, PyTuple>, _kwargs: Option<&Bound<'_, PyDict>>| -> PyResult<Vec<usize>> {
-                                let indcies = Vec::from(children.clone());
-                                Ok(indcies)
-                            },
-                        )?;
-                        kwargs.set_item("_children_callback", children_hook)?;
-                    }
-
-                    let py_node = node_cls.call_method(
+                    let py_node = node_cls.call_method1(
                             intern!(py, "construct_from_node"),
                             (value.clone(),),
-                            Some(&kwargs)
                     )?;
 
                     return Ok(py_node);
@@ -868,13 +851,6 @@ fn process_traversal<N: PyMrkleNode<D, usize>, D: Digest>(
     Err(PyValueError::new_err(format!(
         "Invalid value type for: expected dict or bytes",
     )))
-}
-
-fn test(py: Python<'_>) {
-    let x: usize = 100;
-
-    let y = x.into_pyobject(py);
-    let z = py.None().into_bound(py);
 }
 
 /// Register MerkleTree data structure.

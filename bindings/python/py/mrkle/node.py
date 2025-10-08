@@ -11,7 +11,7 @@ from mrkle.typing import BufferLike as Buffer
 
 from mrkle._tree import Node_T, NODE_MAP
 
-from typing import Any, Callable, Union, Optional, final
+from typing import Any, Union, Optional, final
 
 
 __all__ = ["MrkleNode"]
@@ -40,15 +40,14 @@ class MrkleNode:
 
     _inner: Node_T
     _dtype_name: str
-    _parent_callback: Optional[Callable[[], Optional[int]]]
-    _children_callback: Optional[Callable[[], Optional[Sequence[int]]]]
-    __slots__ = ("_inner", "_dtype_name", "_parent_callback", "_children_callback")
+    __slots__ = (
+        "_inner",
+        "_dtype_name",
+    )
 
     def __init__(self, node: Node_T, *args, **kwargs) -> None:
         self._inner = node
         self._dtype_name = node.dtype().name()
-        self._parent_callback = None
-        self._children_callback = None
 
     @classmethod
     def construct_from_node(cls, node: Node_T, **kwargs: dict[str, Any]) -> MrkleNode:
@@ -64,32 +63,16 @@ class MrkleNode:
         obj = object.__new__(cls)
         object.__setattr__(obj, "_inner", node)
         object.__setattr__(obj, "_dtype_name", node.dtype().name())
-        _parent_callback = kwargs.get("_parent_callback")
-        _children_callback = kwargs.get("_children_callback")
-        object.__setattr__(
-            obj,
-            "_parent_callback",
-            _parent_callback if callable(_parent_callback) else None,
-        )
-        object.__setattr__(
-            obj,
-            "_children_callback",
-            _children_callback if callable(_children_callback) else None,
-        )
 
         return obj
 
     def parent(self) -> Optional[int]:
         """Return parent index within the tree."""
-        if callback := self._parent_callback:
-            return callback()
-        return None
+        return self._inner.parent()
 
-    def children(self) -> Optional[Sequence[int]]:
+    def children(self) -> Sequence[int]:
         """Return children indcies within the tree."""
-        if callback := self._children_callback:
-            return callback()
-        return None
+        return self._inner.children()
 
     def value(self) -> Optional[bytes]:
         """Return internal value of node."""

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
-from collections import Iterable
-from collections.abc import Iterator, Sequence
+from collections.abc import Iterator, Iterable, Sequence
 from typing import (
     Any,
     Literal,
@@ -190,19 +189,27 @@ class MrkleTree:
                 f"{name} is not a digest algorithm supported by MrkleTree."
             )
 
-    def branch(self, index: int) -> "MrkleBranch":
+    def branch(self, node: Union["MrkleNode", int]) -> "MrkleBranch":
         """Return a branch iterator of the MrkleTree."""
+        if isinstance(node, MrkleNode):
+            index = _find_index_from_node(self, node)
+        else:
+            index = node
         return MrkleBranch(self, index)
 
     def generate_proof(
         self,
-        leaves: Union[int, slice, Sequence[int]],
+        leaves: Union[
+            int,
+            slice,
+            Sequence[int],
+            "MrkleNode",
+        ],
     ) -> "MrkleProof":
         """Generate a Merkle proof for the specified leaf nodes.
 
         Args:
-            leaves (Set[MrkleNode]): A set of leaf nodes to generate
-                a proof for.
+            leaves (Union[int, slice, Sequence[int], "MrkleNode"]): A set of leaf.
 
         Returns:
             MrkleProof: A Merkle proof object that can verify the
@@ -400,13 +407,16 @@ class MrkleTree:
         raise SerdeError("Could not deserialize tree from given data.")
 
     @overload
-    def __getitem__(self, key: int) -> MrkleNode: ...
+    def __getitem__(self, key: int) -> MrkleNode:
+        ...
 
     @overload
-    def __getitem__(self, key: slice) -> list[MrkleNode]: ...
+    def __getitem__(self, key: slice) -> list[MrkleNode]:
+        ...
 
     @overload
-    def __getitem__(self, key: Sequence[int]) -> list[MrkleNode]: ...
+    def __getitem__(self, key: Sequence[int]) -> list[MrkleNode]:
+        ...
 
     def __getitem__(
         self, key: Union[int, slice, Sequence[int]]
@@ -417,7 +427,7 @@ class MrkleTree:
             key (Union[int, slice, Sequence[int]]): The index specification.
 
         Returns:
-            list[MrkleNode]: A list of nodes at the specified indices.
+            Union[list[MrkleNode], MrkleNode]: A list of nodes or single node.
 
         Raises:
             TypeError: Rasied if the key type is invalid.
@@ -582,19 +592,32 @@ class MrkleProof:
 
     @classmethod
     def generate(
-        cls, tree: "MrkleTree", leaves: Union[int, slice, Sequence[int]]
+        cls, tree: "MrkleTree", leaves: Union[int, slice, Sequence[int], "MrkleNode"]
     ) -> "MrkleProof":
-        """Generate MrkleProof from MrkleTree, and leaf index."""
+        """Generate MrkleProof from MrkleTree, and leaf index.
+
+        Examples:
+            >>> from mrkle.tree import MrkleTree, MrkleProof
+            >>> tree = MrkleTree.from_leaves(["a", "b", "c"])
+            >>> leaf = tree[0]
+            >>> proof = tree.generate_proof(leaf)
+            >>> # or
+            >>> proof = MrkleProof.generate(tree, node)
+
+        """
         name = tree.dtype().name()
-        proof = PROOF_MAP.get(name)
-        if proof is None:
+
+        if proof := PROOF_MAP.get(name):
+            if isinstance(leaves, int):
+                leaves = [leaves]
+            elif isinstance(leaves, MrkleNode):
+                leaves = [_find_index_from_node(tree, leaves)]
+
+            return cls(proof.generate(tree, leaves))
+        else:
             raise ValueError(
                 f"{name!r} is not a digest algorithm supported by MrkleTree."
             )
-        if isinstance(leaves, int):
-            leaves = [leaves]
-
-        return cls(proof.generate(tree, leaves))
 
     def update(self, leaves: Union[bytes, list[bytes], str, list[str]]) -> None:
         """Update the proof with new leaf values.
@@ -840,3 +863,15 @@ class MrkleBranch(Iterable[MrkleNode]):
     def __str__(self) -> str:
         node_type = self._tree.dtype().name()
         return f"MrkleBranch(dtype={node_type})"
+
+
+def _find_index_from_node(tree: "MrkleTree", item: "MrkleNode") -> int:
+    if p := item.parent():
+        parent = tree[p]
+        for c in parent.children():
+            node = tree[c]
+            if node == item:
+                return c
+        raise TreeError(f"Node {item!r} not found in its parent's children.")
+    else:
+        raise TreeError(f"Node {item!r} has no parent (root or detached).")
