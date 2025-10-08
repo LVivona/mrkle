@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections import Iterable
 from collections.abc import Iterator, Sequence
 from typing import (
     Any,
@@ -188,6 +189,10 @@ class MrkleTree:
             raise ValueError(
                 f"{name} is not a digest algorithm supported by MrkleTree."
             )
+
+    def branch(self, index: int) -> "MrkleBranch":
+        """Return a branch iterator of the MrkleTree."""
+        return MrkleBranch(self, index)
 
     def generate_proof(
         self,
@@ -395,12 +400,17 @@ class MrkleTree:
         raise SerdeError("Could not deserialize tree from given data.")
 
     @overload
+    def __getitem__(self, key: int) -> MrkleNode: ...
+
+    @overload
     def __getitem__(self, key: slice) -> list[MrkleNode]: ...
 
     @overload
     def __getitem__(self, key: Sequence[int]) -> list[MrkleNode]: ...
 
-    def __getitem__(self, key: Union[int, slice, Sequence[int]]) -> list[MrkleNode]:
+    def __getitem__(
+        self, key: Union[int, slice, Sequence[int]]
+    ) -> Union[list[MrkleNode], MrkleNode]:
         """Access nodes by index, slice, or sequence of indices.
 
         Args:
@@ -694,7 +704,7 @@ class MrkleProof:
             MrkleTree: Deserialized Merkle Tree instance.
 
         Raises:
-            ValueError: If the input cannot be interpreted as the specified encoding type.
+            ValueError: If the input cannot be interpreted as the specified encoder.
             SerdeError: If deserialization fails or the data is invalid.
 
         Examples:
@@ -793,3 +803,40 @@ class MrkleProof:
             str: The formatted string representation.
         """
         return super().__format__(format_spec)
+
+
+class MrkleBranch(Iterable[MrkleNode]):
+    _tree: MrkleTree
+    _cursor: MrkleNode | None
+    __slots__: tuple[str, ...] = ("_tree", "_cursor")
+
+    def __init__(self, _tree: MrkleTree, index: int) -> None:
+        self._tree = _tree
+        self._cursor = _tree[index]
+
+    @override
+    def __iter__(self) -> "MrkleBranch":
+        return self
+
+    def __next__(self) -> MrkleNode:
+        if self._cursor is None:
+            raise StopIteration
+
+        node_ptr = self._cursor
+
+        parent = node_ptr.parent()
+        if parent is not None:
+            self._cursor = self._tree[parent]
+        else:
+            self._cursor = None
+
+        return node_ptr
+
+    @override
+    def __repr__(self) -> str:
+        return f"<mrkle.iter.MrkleBranch object at {hex(id(self))}>"
+
+    @override
+    def __str__(self) -> str:
+        node_type = self._tree.dtype().name()
+        return f"MrkleBranch(dtype={node_type})"
