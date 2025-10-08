@@ -27,7 +27,7 @@ class MrkleNode:
 
     Attributes:
         _inner (Node): The underlying Rust-based Merkle node instance.
-        _dtype (str): The name of the digest algorithm used by this node.
+        _dtype_name (str): The name of the digest algorithm used by this node.
 
 
     Examples:
@@ -51,7 +51,6 @@ class MrkleNode:
 
         Args:
             inner (Node): The Rust-based Merkle node.
-            digest (_D): The digest object used for this node.
 
         Returns:
             MrkleNode: A new instance wrapping the given inner node.
