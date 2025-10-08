@@ -5,9 +5,7 @@ use pyo3::exceptions::{PyIndexError, PyTypeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::pycell::PyRef;
 use pyo3::sync::OnceLockExt;
-use pyo3::types::{
-    PyBytes, PyCFunction, PyDict, PyIterator, PyList, PySequence, PySlice, PyTuple, PyType,
-};
+use pyo3::types::{PyBytes, PyDict, PyIterator, PyList, PySequence, PySlice, PyType};
 use pyo3::{intern, Bound as PyBound};
 
 use crypto::digest::Digest;
