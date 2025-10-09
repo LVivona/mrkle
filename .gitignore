@@ -60,7 +60,7 @@ coverage.xml
 .DS_Store
 
 # Sphinx documentation
-docs/_build/
+**/docs/_build/
 
 # PyCharm
 .idea/
