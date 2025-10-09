@@ -9,67 +9,63 @@
 *.so
 
 # Distribution / packaging
-.Python
-.venv/
-env/
-bin/
-build/
-develop-eggs/
-dist/
-eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-include/
-man/
-venv/
-*.egg-info/
-.installed.cfg
-*.egg
+bindings/*/.Python
+bindings/*/.venv/
+bindings/*/env/
+bindings/*/bin/
+bindings/*/build/
+bindings/*/develop-eggs/
+bindings/*/dist/
+bindings/*/eggs/
+bindings/*/lib/
+bindings/*/lib64/
+bindings/*/parts/
+bindings/*/sdist/
+bindings/*/var/
+bindings/**/include/
+bindings/**/man/
+bindings/**/venv/
+bindings/**/*.egg-info/
+bindings/**/.installed.cfg
+bindings/**/*.egg
 
 # Installer logs
-pip-log.txt
-pip-delete-this-directory.txt
-pip-selfcheck.json
+bindings/*/pip-log.txt
+bindings/*/pip-delete-this-directory.txt
+bindings/**/pip-selfcheck.json
 
 # Unit test / coverage reports
-htmlcov/
-.tox/
-.coverage
-.cache
-nosetests.xml
-coverage.xml
+bindings/*/htmlcov/
+bindings/*/.tox/
+bindings/*/.coverage
+bindings/*/.cache
+bindings/*/nosetests.xml
+bindings/*/coverage.xml
 
 # Translations
-*.mo
+bindings/*/*.mo
 
 # Mr Developer
-.mr.developer.cfg
-.project
-.pydevproject
+bindings/*/.mr.developer.cfg
+bindings/*/.project
+bindings/*/.pydevproject
 
 # Rope
-.ropeproject
-
-# Django stuff:
-*.log
-*.pot
+bindings/*/.ropeproject
 
 .DS_Store
 
 # Sphinx documentation
-**/docs/_build/
+bindings/*/docs/_build/
 
 # PyCharm
-.idea/
+bindings/*/.idea/
 
 # VSCode
 .vscode/
 
 # Pyenv
-.python-version
+bindings/*/.python-version
 
 # Rust Docs
 */docs/.rustc_info.json
