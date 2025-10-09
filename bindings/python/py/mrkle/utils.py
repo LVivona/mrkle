@@ -13,7 +13,7 @@ from mrkle.typing import BufferLike as Buffer
 NestedDict = dict[str, Union[Buffer, str, "NestedDict"]]
 
 
-def unflatten(state_dict: dict[str, Buffer]) -> NestedDict:
+def unflatten(state_dict: dict[str, Buffer], sep: str = ".") -> NestedDict:
     """Returns an unflattened tree.
 
     Args:
@@ -32,11 +32,11 @@ def unflatten(state_dict: dict[str, Buffer]) -> NestedDict:
     """
     result_dict: NestedDict = {}
     for key, value in state_dict.items():
-        parts = key.split(".")
+        parts: list[str] = key.split(sep)
         d: NestedDict = result_dict
         for part in parts[:-1]:
             if part not in d or not isinstance(d[part], dict):
                 d[part] = {}
             d = d[part]  # type: ignore[assignment]
-        d[parts[-1]] = value
+        d[parts[-1]] = value  # type: ignore[index]
     return result_dict
