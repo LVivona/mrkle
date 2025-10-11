@@ -5,19 +5,18 @@ use pyo3::sync::OnceLockExt;
 use pyo3::Bound as PyBound;
 
 use pyo3::exceptions::{PyIndexError, PyNotImplementedError, PyValueError};
-use pyo3::types::{PyDict, PyModule, PyType};
+use pyo3::types::{PyModule, PyType};
 
 use mrkle::error::ProofError;
 use mrkle::{GenericArray, MrkleProof, MrkleProofNode, MutNode, Node, NodeIndex, Tree};
 
 use crate::{
-    codec::Codec,
     crypto::{
         PyBlake2b512Wrapper, PyBlake2s256Wrapper, PyKeccak224Wrapper, PyKeccak256Wrapper,
         PyKeccak384Wrapper, PyKeccak512Wrapper, PySha1Wrapper, PySha224Wrapper, PySha256Wrapper,
         PySha384Wrapper, PySha512Wrapper,
     },
-    errors::{ProofError as PyProofError, SerdeError},
+    errors::ProofError as PyProofError,
     tree::{
         PyMrkleNode_Blake2b, PyMrkleNode_Blake2s, PyMrkleNode_Keccak224, PyMrkleNode_Keccak256,
         PyMrkleNode_Keccak384, PyMrkleNode_Keccak512, PyMrkleNode_Sha1, PyMrkleNode_Sha224,
@@ -78,7 +77,7 @@ macro_rules! py_mrkle_proof {
                 tree: Bound<'_, PyAny>,
                 leaves: Vec<isize>,
             ) -> PyResult<Self> {
-                Python::with_gil(|py| {
+                Python::attach(|py| {
                     let module = PyModule::import(py, intern!(py, "mrkle"))?;
                     MRKLE_MODULE.get_or_init_py_attached(py, || module.clone().unbind());
 
@@ -116,10 +115,13 @@ macro_rules! py_mrkle_proof {
                         let proof = Self::generate_proof_from_leaf(
                             &internal_tree.inner,
                             NodeIndex::new(index as usize),
-                        ).map_err(|e| PyProofError::new_err(format!("{e}")))?;
+                        )
+                        .map_err(|e| PyProofError::new_err(format!("{e}")))?;
                         Ok(proof)
                     } else {
-                        Err(PyNotImplementedError::new_err("Multi-proof has not been implmented."))
+                        Err(PyNotImplementedError::new_err(
+                            "Multi-proof has not been implmented.",
+                        ))
                     }
                 })
             }
@@ -142,8 +144,8 @@ macro_rules! py_mrkle_proof {
                 }
 
                 if let Ok(hex_str) = leaves.extract::<String>() {
-                    let bytes = hex::decode(hex_str)
-                        .map_err(|e| PyValueError::new_err(format!("{e}")))?;
+                    let bytes =
+                        hex::decode(hex_str).map_err(|e| PyValueError::new_err(format!("{e}")))?;
 
                     self.inner
                         .update_leaf_hash(0, GenericArray::<$digest>::clone_from_slice(&bytes))
@@ -153,11 +155,17 @@ macro_rules! py_mrkle_proof {
 
                 if let Ok(multi_hex) = leaves.extract::<Vec<String>>() {
                     for (idx, hex_str) in multi_hex.iter().enumerate() {
-                        let bytes = hex::decode(hex_str)
-                            .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("Invalid hex at index {idx}: {e}")))?;
+                        let bytes = hex::decode(hex_str).map_err(|e| {
+                            PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(
+                                "Invalid hex at index {idx}: {e}"
+                            ))
+                        })?;
 
                         self.inner
-                            .update_leaf_hash(idx, GenericArray::<$digest>::clone_from_slice(&bytes))
+                            .update_leaf_hash(
+                                idx,
+                                GenericArray::<$digest>::clone_from_slice(&bytes),
+                            )
                             .map_err(|e| PyProofError::new_err(format!("{e}")))?;
                     }
                     return Ok(());
@@ -168,13 +176,14 @@ macro_rules! py_mrkle_proof {
                 ))
             }
 
-
             fn validate(&mut self) -> PyResult<bool> {
                 Ok(self.inner.valid())
             }
 
             fn try_validate(&mut self) -> PyResult<bool> {
-                self.inner.try_validate_basic().map_err(|e| PyProofError::new_err(format!("{e}")))
+                self.inner
+                    .try_validate_basic()
+                    .map_err(|e| PyProofError::new_err(format!("{e}")))
             }
 
             fn refresh(&mut self) {
@@ -202,47 +211,49 @@ macro_rules! py_mrkle_proof {
                 format!("{}", self.inner)
             }
 
-            #[pyo3(text_signature = "(encoding, **kwargs)")]
-            fn dumps<'py>(
-                &self,
-                py: Python<'py>,
-                encoding: Option<Codec>,
-                _kwargs: PyBound<'_, PyDict>,
-            ) -> PyResult<Bound<'py, PyAny>> {
-                match encoding {
-                    Some(Codec::JSON) => {
-                        let json_str = serde_json::to_vec(&self).map_err(|e| {
-                            SerdeError::new_err(format!("JSON serialization error: {}", e))
-                        })?;
-                        Ok(json_str.into_pyobject(py)?.into_any())
-                    }
-                    Some(Codec::CBOR) | None => {
-                        let bytes = serde_cbor::to_vec(&self).map_err(|e| {
-                            SerdeError::new_err(format!("CBOR serialization error: {}", e))
-                        })?;
-                        Ok(pyo3::types::PyBytes::new(py, &bytes).into_any())
-                    }
-                }
-            }
+            // UNCOMMENT: when rust implmentation fully implmented.
+            // #[pyo3(text_signature = "(encoding, **kwargs)")]
+            // fn dumps<'py>(
+            //     &self,
+            //     py: Python<'py>,
+            //     encoding: Option<Codec>,
+            //     _kwargs: PyBound<'_, PyDict>,
+            // ) -> PyResult<Bound<'py, PyAny>> {
+            //     match encoding {
+            //         Some(Codec::JSON) => {
+            //             let json_str = serde_json::to_vec(&self).map_err(|e| {
+            //                 SerdeError::new_err(format!("JSON serialization error: {}", e))
+            //             })?;
+            //             Ok(json_str.into_pyobject(py)?.into_any())
+            //         }
+            //         Some(Codec::CBOR) | None => {
+            //             let bytes = serde_cbor::to_vec(&self).map_err(|e| {
+            //                 SerdeError::new_err(format!("CBOR serialization error: {}", e))
+            //             })?;
+            //             Ok(pyo3::types::PyBytes::new(py, &bytes).into_any())
+            //         }
+            //     }
+            // }
 
-            #[staticmethod]
-            #[pyo3(text_signature = "(data : bytes, encoding : Optional[Literal['json', 'codec']] = None, **kwargs)")]
-            fn loads(
-                data: &PyBound<'_, PyAny>,
-                encoding: Option<Codec>,
-                _kwargs: PyBound<'_, PyDict>,
-            ) -> PyResult<Self> {
-                let bytes = data.extract::<&[u8]>()?;
+            // UNCOMMENT: when rust implmentation fully implmented.
+            // #[staticmethod]
+            // #[pyo3(text_signature = "(data : bytes, encoding : Optional[Literal['json', 'codec']] = None, **kwargs)")]
+            // fn loads(
+            //     data: &PyBound<'_, PyAny>,
+            //     encoding: Option<Codec>,
+            //     _kwargs: PyBound<'_, PyDict>,
+            // ) -> PyResult<Self> {
+            //     let bytes = data.extract::<&[u8]>()?;
 
-                match encoding {
-                    Some(Codec::JSON) => serde_json::from_slice(&bytes).map_err(|e| {
-                        SerdeError::new_err(format!("JSON deserialization error: {}", e))
-                    }),
-                    Some(Codec::CBOR) | None => serde_cbor::from_slice(bytes).map_err(|e| {
-                        SerdeError::new_err(format!("CBOR deserialization error: {}", e))
-                    }),
-                }
-            }
+            //     match encoding {
+            //         Some(Codec::JSON) => serde_json::from_slice(&bytes).map_err(|e| {
+            //             SerdeError::new_err(format!("JSON deserialization error: {}", e))
+            //         }),
+            //         Some(Codec::CBOR) | None => serde_cbor::from_slice(bytes).map_err(|e| {
+            //             SerdeError::new_err(format!("CBOR deserialization error: {}", e))
+            //         }),
+            //     }
+            // }
         }
 
         impl $name {

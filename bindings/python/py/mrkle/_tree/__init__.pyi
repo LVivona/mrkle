@@ -1,11 +1,14 @@
 """Type stubs for Merkle tree implementations."""
 
 from __future__ import annotations
-from collections.abc import Sequence
+
 from typing import Any, Final, Iterator, Protocol, Union, Literal, Optional
-from mrkle.crypto.typing import Digest
 from typing_extensions import TypeAlias, override
-from mrkle.typing import BufferLike as Buffer
+
+from collections.abc import Sequence
+
+from mrkle.typing import BufferLike as Buffer, File
+from mrkle.crypto.typing import Digest
 
 class _MrkleTreeBase(Protocol):
     """Base protocol for Merkle tree implementations."""
@@ -31,12 +34,16 @@ class _MrkleTreeBase(Protocol):
         """Return a string representation of the tree structure."""
         ...
     def dumps(
-        self, encoding: Optional[Literal["json", "cbor"]], **kwargs: dict[str, Any]
-    ) -> bytes: ...
+        self,
+        fp: Optional[File] = None,
+        *,
+        encoding: Literal["utf-8", "bytes"] = "utf-8",
+        indent: Optional[int] = None,
+    ) -> Optional[bytes]: ...
     @staticmethod
-    def loads(
-        data: Union[str, bytes], encoding: Optional[Literal["json", "cbor"]]
-    ) -> "Tree_T": ...
+    def loads(data: Union[str, bytes], format: Literal["json"]) -> "Tree_T": ...
+    @staticmethod
+    def load(fp: File, format: Literal["json"]) -> "Tree_T": ...
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "Tree_T": ...
     @override

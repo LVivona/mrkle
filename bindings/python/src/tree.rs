@@ -1,17 +1,24 @@
 #![allow(dead_code)]
 #![allow(non_camel_case_types)]
 
+use std::collections::HashMap;
+use std::io::{Read, Write};
+
+use serde::Serialize;
+
+use crypto::digest::Digest;
+
 use pyo3::exceptions::{PyIndexError, PyTypeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::pycell::PyRef;
 use pyo3::sync::OnceLockExt;
-use pyo3::types::{PyBytes, PyDict, PyIterator, PyList, PySequence, PySlice, PyType};
-use pyo3::{intern, Bound as PyBound};
+use pyo3::types::{PyAny, PyBytes, PyDict, PyIterator, PyList, PySequence, PySlice, PyType};
+use pyo3::{intern, Bound as PyBound, Py};
 
-use crypto::digest::Digest;
+use pyo3_file::PyFileLikeObject;
 
 use crate::{
-    codec::Codec,
+    codec::{JsonCodec, MerkleTreeJson, PyCodecFormat},
     crypto::{
         PyBlake2b512Wrapper, PyBlake2s256Wrapper, PyKeccak224Wrapper, PyKeccak256Wrapper,
         PyKeccak384Wrapper, PyKeccak512Wrapper, PySha1Wrapper, PySha224Wrapper, PySha256Wrapper,
@@ -332,7 +339,7 @@ macro_rules! py_mrkle_tree {
                 };
 
                 // Now we can borrow tree and work with it
-                Python::with_gil(|py| {
+                Python::attach(|py| {
                     let tree = slf.tree.borrow(py);
 
                     if let Some(node) = tree.inner.get(index) {
@@ -360,9 +367,12 @@ macro_rules! py_mrkle_tree {
         impl $name {
             #[inline]
             fn root(&self) -> PyResult<&[u8]> {
-                Ok(self.inner.try_root().map_err(|e| TreeError::new_err(format!("{e}")))?.hash())
+                Ok(self
+                    .inner
+                    .try_root()
+                    .map_err(|e| TreeError::new_err(format!("{e}")))?
+                    .hash())
             }
-
 
             #[inline]
             pub fn is_empty(&self) -> bool {
@@ -391,7 +401,10 @@ macro_rules! py_mrkle_tree {
             #[inline]
             #[classmethod]
             #[pyo3(text_signature = "(cls, data : Dict[str, bytes])")]
-            pub fn from_dict(_cls: &PyBound<'_, PyType>, data : PyBound<'_, PyDict>) -> PyResult<Self> {
+            pub fn from_dict(
+                _cls: &PyBound<'_, PyType>,
+                data: PyBound<'_, PyDict>,
+            ) -> PyResult<Self> {
                 let mut inner = Tree::new();
 
                 traverse_dict_depth(data, &mut inner)?;
@@ -405,8 +418,6 @@ macro_rules! py_mrkle_tree {
                 _cls: &PyBound<'_, PyType>,
                 leaves: PyBound<'_, PyAny>,
             ) -> PyResult<Self> {
-
-
                 let mut tree = Tree::<$node, usize>::new();
 
                 let mut leaves = if let Ok(leaves) = leaves.extract::<Vec<PyBound<'_, PyAny>>>() {
@@ -419,11 +430,11 @@ macro_rules! py_mrkle_tree {
                         .try_iter()?
                         .map(|obj| obj.and_then(|obj| extract_to_bytes(&obj)))
                         .collect::<PyResult<Vec<_>>>()
-
                 } else {
-                    return Err(PyTypeError::new_err("Unable to construct tree due to wrong types"))
+                    return Err(PyTypeError::new_err(
+                        "Unable to construct tree due to wrong types",
+                    ));
                 }?;
-
 
                 if leaves.is_empty() {
                     return Ok(Self { inner: tree });
@@ -436,8 +447,8 @@ macro_rules! py_mrkle_tree {
 
                     let leaf_idx = tree.push(leaf);
 
-
-                    let root = <$node>::internal(&tree, vec![leaf_idx]).map_err(|e| PyNodeError::new_err(format!("{e}")))?;
+                    let root = <$node>::internal(&tree, vec![leaf_idx])
+                        .map_err(|e| PyNodeError::new_err(format!("{e}")))?;
                     let root_idx = tree.push(root);
                     tree[leaf_idx].parent = Some(root_idx);
                     tree.set_root(Some(root_idx));
@@ -457,8 +468,10 @@ macro_rules! py_mrkle_tree {
                     let lhs = queue.pop_front().unwrap();
                     let rhs = queue.pop_front().unwrap();
 
-
-                    let parent_idx = tree.push(<$node>::internal(&tree, vec![lhs, rhs]).map_err(|e| PyNodeError::new_err(format!("{e}")))?);
+                    let parent_idx = tree.push(
+                        <$node>::internal(&tree, vec![lhs, rhs])
+                            .map_err(|e| PyNodeError::new_err(format!("{e}")))?,
+                    );
 
                     tree[lhs].parent = Some(parent_idx);
                     tree[rhs].parent = Some(parent_idx);
@@ -466,7 +479,6 @@ macro_rules! py_mrkle_tree {
                     queue.push_back(parent_idx);
                 }
                 tree.set_root(queue.pop_front());
-
 
                 Ok(Self { inner: tree })
             }
@@ -498,10 +510,8 @@ macro_rules! py_mrkle_tree {
                         .get(idx)
                         .ok_or_else(|| PyIndexError::new_err("index out of range"))?;
 
-                    let py_node = node_cls.call_method1(
-                            intern!(py, "construct_from_node"),
-                            (value.clone(),),
-                    )?;
+                    let py_node = node_cls
+                        .call_method1(intern!(py, "construct_from_node"), (value.clone(),))?;
 
                     return Ok(py_node);
                 }
@@ -561,8 +571,6 @@ macro_rules! py_mrkle_tree {
                 ))
             }
 
-
-
             fn __iter__(slf: PyRef<'_, Self>) -> PyResult<$iter_name> {
                 let mut queue = std::collections::VecDeque::new();
 
@@ -592,45 +600,199 @@ macro_rules! py_mrkle_tree {
                 format!("{}", self.inner)
             }
 
+            #[pyo3(text_signature = "(self, fp, *, indent : Optional[int] = None encoding : Literal['bytes', 'utf-8'])")]
             fn dumps<'py>(
                 &self,
                 py: Python<'py>,
-                encoding: Option<Codec>,
+                fp: Option<Py<PyAny>>,
+                indent: Option<usize>,
+                encoding: PyCodecFormat,
             ) -> PyResult<Bound<'py, PyAny>> {
-                match encoding {
-                    Some(Codec::JSON) => {
-                        let json_str = serde_json::to_vec(&self).map_err(|e| {
-                            SerdeError::new_err(format!("JSON serialization error: {}", e))
-                        })?;
-                        Ok(json_str.into_pyobject(py)?.into_any())
+                let buf = JsonCodec::<&[u8], $digest>::new(
+                    self.inner
+                        .start()
+                        .and_then(|root| self.from_node(root, &mut HashMap::new()))
+                        .ok_or_else(|| SerdeError::new_err("JSON could not be serialized."))?,
+                );
+
+                // Generate the JSON data
+                let json_data = match encoding {
+                    PyCodecFormat::UTF_8 => {
+                        let json_string = match indent {
+                            Some(spaces) if spaces > 0 => {
+                                let indent_str = " ".repeat(spaces);
+                                let formatter = serde_json::ser::PrettyFormatter::with_indent(
+                                    indent_str.as_bytes(),
+                                );
+                                let mut vec = Vec::new();
+                                let mut serializer =
+                                    serde_json::Serializer::with_formatter(&mut vec, formatter);
+                                buf.serialize(&mut serializer)
+                                    .map_err(|e| SerdeError::new_err(format!("{}", e)))?;
+                                String::from_utf8(vec)
+                                    .map_err(|e| SerdeError::new_err(format!("{}", e)))?
+                            }
+                            _ => buf
+                                .to_string()
+                                .map_err(|e| SerdeError::new_err(format!("{}", e)))?,
+                        };
+                        json_string.into_bytes()
                     }
-                    Some(Codec::CBOR) | None => {
-                        let bytes = serde_cbor::to_vec(&self).map_err(|e| {
-                            SerdeError::new_err(format!("CBOR serialization error: {}", e))
-                        })?;
-                        Ok(pyo3::types::PyBytes::new(py, &bytes).into_any())
-                    }
+                    PyCodecFormat::BYTES => match indent {
+                        Some(spaces) if spaces > 0 => {
+                            let indent_str = " ".repeat(spaces);
+                            let formatter = serde_json::ser::PrettyFormatter::with_indent(
+                                indent_str.as_bytes(),
+                            );
+                            let mut vec = Vec::new();
+                            let mut serializer =
+                                serde_json::Serializer::with_formatter(&mut vec, formatter);
+                            buf.serialize(&mut serializer)
+                                .map_err(|e| SerdeError::new_err(format!("{}", e)))?;
+                            vec
+                        }
+                        _ => buf
+                            .to_vec()
+                            .map_err(|e| SerdeError::new_err(format!("{}", e)))?,
+                    },
+                };
+
+                // If fp is provided, write to file
+                if let Some(file_obj) = fp {
+                    let mut file = PyFileLikeObject::with_requirements(
+                        file_obj.into(),
+                        true,  // write
+                        false, // read
+                        false, // seek
+                        false,
+                    )?;
+
+                    file.write_all(&json_data).map_err(|e| {
+                        PyErr::new::<pyo3::exceptions::PyIOError, _>(format!(
+                            "Failed to write to file: {}",
+                            e
+                        ))
+                    })?;
+
+                    // Return None to match Python's json.dump behavior
+                    Ok(py.None().into_bound(py))
+                } else {
+                    // Return the data as string or bytes
+                    let output = match encoding {
+                        PyCodecFormat::UTF_8 => String::from_utf8(json_data)
+                            .map_err(|e| SerdeError::new_err(format!("{}", e)))?
+                            .into_pyobject(py)?
+                            .into_any(),
+                        PyCodecFormat::BYTES => json_data.into_pyobject(py)?.into_any(),
+                    };
+                    Ok(output)
                 }
             }
 
+            // Update the loads method in the macro
             #[staticmethod]
-            #[pyo3(text_signature = "(data : bytes, encoding : Optional[Literal['json', 'codec']] = None)")]
+            #[pyo3(text_signature = "(data : Union[bytes, str])")]
             fn loads(
+                py: Python<'_>,
                 data: &Bound<'_, PyAny>,
-                encoding: Option<Codec>,
             ) -> PyResult<Self> {
-                let bytes = data.extract::<&[u8]>()?;
-
-                match encoding {
-                    Some(Codec::JSON) => serde_json::from_slice(&bytes).map_err(|e| {
-                        SerdeError::new_err(format!("JSON deserialization error: {}", e))
-                    }),
-                    Some(Codec::CBOR) | None => serde_cbor::from_slice(bytes).map_err(|e| {
-                        SerdeError::new_err(format!("CBOR deserialization error: {}", e))
-                    }),
+                // Try to extract as bytes or string
+                let json_codec = if let Ok(bytes) = data.extract::<&[u8]>() {
+                    JsonCodec::<Box<[u8]>, $digest>::from_slice(bytes)
+                } else if let Ok(string) = data.extract::<String>() {
+                    JsonCodec::<Box<[u8]>, $digest>::from_str(string.as_str())
+                } else {
+                    return Err(PyTypeError::new_err(
+                        "Expected bytes or string for JSON deserialization",
+                    ));
                 }
+                .map_err(|e| {
+                    SerdeError::new_err(format!("{}", e))
+                })?;
+
+                // Validate hash type and size
+                if !json_codec.validate_hash_type() {
+                    return Err(SerdeError::new_err(format!(
+                        "Hash type mismatch expected {}, got {}",
+                        <$digest as crate::crypto::PyDigest>::algorithm_name().to_string(),
+                        json_codec.hash_type
+                    )));
+                }
+
+                if !json_codec.validate_hash_size() {
+                    return Err(SerdeError::new_err(format!(
+                        "Hash size mismatch expected {}, got {}",
+                        <$digest>::output_size(),
+                        json_codec.hash_size
+                    )));
+                }
+
+                // Build tree from JSON structure
+                let mut tree = Tree::<$node, usize>::new();
+                let root_idx =
+                    Self::build_tree_from_json(py, json_codec.into_tree(), &mut tree)?;
+                tree.set_root(Some(root_idx));
+
+                Ok(Self { inner: tree })
             }
 
+            // Add a load method for reading from file
+            #[staticmethod]
+            #[pyo3(text_signature = "(fp)")]
+            fn load(fp: Py<PyAny>) -> PyResult<Self> {
+                Python::attach(|py| {
+
+                    let mut file = PyFileLikeObject::with_requirements(
+                        fp.into(),
+                        false, // write
+                        true,  // read
+                        false, // seek
+                        false,
+                    )?;
+
+                    let mut buffer = Vec::new();
+                    file.read_to_end(&mut buffer).map_err(|e| {
+                        PyErr::new::<pyo3::exceptions::PyIOError, _>(format!(
+                            "Failed to read from file {}.",
+                            e
+                        ))
+                    })?;
+
+                    // Deserialize from the buffer
+                    let json_codec = JsonCodec::<Box<[u8]>, $digest>::from_slice(&buffer)
+                        .map_err(|e| {
+                            SerdeError::new_err(format!(
+                                "{}",
+                                e
+                            ))
+                        })?;
+
+                    // Validate hash type and size
+                    if !json_codec.validate_hash_type() {
+                        return Err(SerdeError::new_err(format!(
+                            "Hash type mismatch expected {}, got {}.",
+                            <$digest as crate::crypto::PyDigest>::algorithm_name().to_string(),
+                            json_codec.hash_type,
+                        )));
+                    }
+
+                    if !json_codec.validate_hash_size() {
+                        return Err(SerdeError::new_err(format!(
+                            "Hash size mismatch expected {}, got {}.",
+                            <$digest>::output_size(),
+                            json_codec.hash_size
+                        )));
+                    }
+
+                    // Build tree from JSON structure
+                    let mut tree = Tree::<$node, usize>::new();
+                    let root_idx =
+                        Self::build_tree_from_json(py, json_codec.into_tree(), &mut tree)?;
+                    tree.set_root(Some(root_idx));
+
+                    Ok(Self { inner: tree })
+                })
+            }
         }
 
         impl $name {
@@ -689,6 +851,80 @@ macro_rules! py_mrkle_tree {
             /// Returns Iterator pattern [`Iter`] which returns a unmutable Node reference.
             pub fn iter(&self) -> Iter<'_, $node, usize> {
                 self.inner.iter()
+            }
+
+            fn build_tree_from_json<'py>(
+                py: Python<'py>,
+                node: MerkleTreeJson<Box<[u8]>>,
+                tree: &mut Tree<$node, usize>,
+            ) -> PyResult<NodeIndex<usize>> {
+                match node {
+                    MerkleTreeJson::Leaf { hash, value } => {
+                        // Create leaf node with pre-computed hash
+                        let leaf = <$node>::leaf_with_digest(
+                            PyBytes::new(py, &*value),
+                            PyBytes::new(py, hash.as_slice()),
+                        );
+                        Ok(tree.push(leaf))
+                    }
+                    MerkleTreeJson::Parent { children, .. } => {
+                        // Recursively build children first
+                        let mut child_indices = Vec::new();
+                        for child in children {
+                            let child_idx = Self::build_tree_from_json(py, child, tree)?;
+                            child_indices.push(child_idx);
+                        }
+
+                        // Create parent node with pre-computed hash
+                        // We need a custom method to create parent with existing hash
+                        let parent = Self::create_parent_with_hash(tree, child_indices.clone())?;
+                        let parent_idx = tree.push(parent);
+
+                        // Set parent references in children
+                        for &child_idx in &child_indices {
+                            tree[child_idx].set_parent(parent_idx);
+                        }
+
+                        Ok(parent_idx)
+                    }
+                }
+            }
+
+            fn create_parent_with_hash(
+                tree: &Tree<$node, usize>,
+                children: Vec<NodeIndex<usize>>,
+            ) -> PyResult<$node> {
+                <$node>::internal(tree, children).map_err(|e| PyNodeError::new_err(format!("{e}")))
+            }
+
+            fn from_node(
+                &self,
+                index: NodeIndex<usize>,
+                visited: &mut HashMap<usize, ()>,
+            ) -> Option<MerkleTreeJson<&[u8]>> {
+                let idx = index.index();
+                if visited.contains_key(&idx) {
+                    return None;
+                }
+                visited.insert(idx, ());
+
+                let node = &self.get(idx).unwrap();
+                let hash = node.hash().to_vec();
+                let children_indices = node.children();
+
+                if node.is_leaf() {
+                    // Leaf node
+                    let value = node.value()?.clone();
+                    Some(MerkleTreeJson::Leaf { hash, value })
+                } else {
+                    // Parent node
+                    let children: Vec<_> = children_indices
+                        .iter()
+                        .filter_map(|&child_idx| self.from_node(child_idx, visited))
+                        .collect();
+
+                    Some(MerkleTreeJson::Parent { hash, children })
+                }
             }
         }
     };
@@ -811,7 +1047,7 @@ fn traverse_dict_depth<N: PyMrkleNode<D, usize>, D: Digest>(
         Ok(())
     } else {
         Err(PyValueError::new_err(format!(
-            "Invalid value type for: expected dict or bytes",
+            "Invalid value type for expected dict or bytes",
         )))
     }
 }

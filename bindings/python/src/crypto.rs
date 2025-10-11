@@ -3,11 +3,44 @@ use crypto::digest::{
     Digest, FixedOutput, FixedOutputReset, Output, OutputSizeUser, Reset, Update,
 };
 use pyo3::prelude::*;
-use pyo3::types::PyBytes;
-use pyo3::Bound as PyBound;
+use pyo3::types::{PyAny, PyBytes};
+use pyo3::{Bound as PyBound, Py};
 use sha1::Sha1;
 use sha2::{Sha224, Sha256, Sha384, Sha512};
 use sha3::{Keccak224, Keccak256, Keccak384, Keccak512};
+
+/// Trait for Python-exposed digest algorithms
+pub trait PyDigest: Sized + Clone + Send + Sync {
+    /// The underlying digest type from RustCrypto
+    type Inner: Digest + FixedOutput + FixedOutputReset + Reset;
+
+    /// Get the algorithm name (e.g., "sha256", "blake2b512")
+    fn algorithm_name() -> &'static str;
+
+    /// Get the output size in bytes
+    fn output_size() -> usize;
+
+    /// Create a new instance
+    fn new() -> Self;
+
+    /// Create a new instance with a prefix
+    fn new_with_prefix(data: &[u8]) -> Self;
+
+    /// Update the digest with data
+    fn update(&mut self, data: &[u8]);
+
+    /// Finalize and return the digest
+    fn finalize(self) -> Output<Self::Inner>;
+
+    /// Finalize and reset the digest
+    fn finalize_reset(&mut self) -> Output<Self::Inner>;
+
+    /// Reset the digest
+    fn reset(&mut self);
+
+    /// Compute digest of data in one step
+    fn digest(data: &[u8]) -> Output<Self::Inner>;
+}
 
 macro_rules! py_digest {
     ($classname:tt, $name:ident, $digest:ty, $size:ty, $output:tt) => {
@@ -21,22 +54,62 @@ macro_rules! py_digest {
             }
         }
 
+        impl PyDigest for $name {
+            type Inner = $digest;
+
+            fn algorithm_name() -> &'static str {
+                $classname
+            }
+
+            fn output_size() -> usize {
+                $output
+            }
+
+            fn new() -> Self {
+                Self(<$digest>::new())
+            }
+
+            fn new_with_prefix(data: &[u8]) -> Self {
+                Self(<$digest>::new_with_prefix(data))
+            }
+
+            fn update(&mut self, data: &[u8]) {
+                Update::update(&mut self.0, data)
+            }
+
+            fn finalize(self) -> Output<Self::Inner> {
+                self.0.finalize()
+            }
+
+            fn finalize_reset(&mut self) -> Output<Self::Inner> {
+                FixedOutputReset::finalize_fixed_reset(&mut self.0)
+            }
+
+            fn reset(&mut self) {
+                Reset::reset(&mut self.0)
+            }
+
+            fn digest(data: &[u8]) -> Output<Self::Inner> {
+                <$digest>::digest(data)
+            }
+        }
+
         #[pymethods]
         impl $name {
             #[new]
             pub fn new() -> Self {
-                Self(<$digest>::new())
+                <Self as PyDigest>::new()
             }
 
             #[staticmethod]
             #[pyo3(name = "new_with_prefix")]
             pub fn new_with_prefix_py(data: PyBound<'_, PyBytes>) -> Self {
-                Self(<$digest>::new_with_prefix(data.as_bytes()))
+                <Self as PyDigest>::new_with_prefix(data.as_bytes())
             }
 
             #[pyo3(name = "update")]
             pub fn update_bytes(&mut self, data: PyBound<'_, PyBytes>) {
-                Update::update(&mut self.0, data.as_bytes())
+                <Self as PyDigest>::update(self, data.as_bytes())
             }
 
             #[pyo3(name = "finalize")]
@@ -46,61 +119,63 @@ macro_rules! py_digest {
             }
 
             #[pyo3(name = "finalize_reset")]
-            pub fn finalize_reset_py(&mut self, py: Python<'_>) -> PyResult<Py<PyBytes>>
-            where
-                $digest: FixedOutputReset,
-            {
-                let result = FixedOutputReset::finalize_fixed_reset(&mut self.0);
+            pub fn finalize_reset_py(&mut self, py: Python<'_>) -> PyResult<Py<PyBytes>> {
+                let result = <Self as PyDigest>::finalize_reset(self);
                 Ok(PyBytes::new(py, &result).unbind())
             }
 
             #[pyo3(name = "reset")]
-            pub fn reset_digest(&mut self)
-            where
-                $digest: Reset,
-            {
-                Reset::reset(&mut self.0)
+            pub fn reset_digest(&mut self) {
+                <Self as PyDigest>::reset(self)
             }
 
             #[staticmethod]
             #[pyo3(name = "digest")]
             pub fn digest_bytes(py: Python<'_>, data: PyBound<'_, PyBytes>) -> Py<PyBytes> {
-                let result = <$digest>::digest(data.as_bytes());
+                let result = <Self as PyDigest>::digest(data.as_bytes());
                 PyBytes::new(py, &result).unbind()
             }
 
             #[staticmethod]
             pub fn output_size() -> usize {
-                $output
+                <Self as PyDigest>::output_size()
             }
 
             #[staticmethod]
             pub fn name() -> String {
-                $classname.to_string()
+                <Self as PyDigest>::algorithm_name().to_string()
             }
 
-            fn __setattr__(&self, _name: &str, _value: PyObject) -> PyResult<()> {
+            fn __setattr__(&self, _name: &str, _value: Py<PyAny>) -> PyResult<()> {
                 Err(PyErr::new::<pyo3::exceptions::PyAttributeError, _>(
-                    format!("{} objects are immutable", $classname),
+                    format!(
+                        "{} objects are immutable",
+                        <Self as PyDigest>::algorithm_name()
+                    ),
                 ))
             }
 
             fn __delattr__(&self, _name: &str) -> PyResult<()> {
                 Err(PyErr::new::<pyo3::exceptions::PyAttributeError, _>(
-                    format!("{} objects are immutable", $classname),
+                    format!(
+                        "{} objects are immutable",
+                        <Self as PyDigest>::algorithm_name()
+                    ),
                 ))
             }
 
             fn __repr__(&self) -> String {
                 format!(
                     "<{} _mrkle_rs.crypto.Digest object at {:p}>",
-                    $classname, self
+                    <Self as PyDigest>::algorithm_name(),
+                    self
                 )
             }
 
             #[inline]
             fn __str__(&self) -> String {
-                let mut chars = $classname.chars();
+                let classname = <Self as PyDigest>::algorithm_name();
+                let mut chars = classname.chars();
                 format!(
                     "{}()",
                     chars
@@ -284,15 +359,6 @@ py_digest!(
 );
 
 /// Register all custom crypto with the Python module.
-///
-/// This function should be called during module initialization to make
-/// all custom exceptions available in Python.
-///
-/// # Arguments
-/// * `m` - parent Python module
-///
-/// # Returns
-/// * `PyResult<()>` - Success or error during registration
 #[pymodule]
 pub(crate) fn register_crypto(m: &Bound<'_, PyModule>) -> PyResult<()> {
     let exce_m = PyModule::new(m.py(), "crypto")?;

@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import json
+
 from collections.abc import Iterator, Iterable, Sequence
+
 from typing import (
     Any,
     Literal,
@@ -15,12 +18,12 @@ from mrkle.crypto import new
 from mrkle.crypto.typing import Digest
 
 from mrkle.utils import unflatten
-from mrkle.typing import BufferLike as Buffer
+from mrkle.typing import BufferLike as Buffer, File
 
 from mrkle.iter import MrkleTreeIter
 from mrkle.node import MrkleNode
 
-from mrkle.errors import MerkleError, SerdeError, TreeError
+from mrkle.errors import TreeError
 
 from mrkle._proof import Proof_T, PROOF_MAP
 from mrkle._tree import Node_T, Tree_T, TREE_MAP
@@ -63,25 +66,44 @@ class MrkleTree:
         self._inner = tree
 
     def root(self) -> Optional[bytes]:
-        """Return the root hash as a hexadecimal string.
+        """Return the root hash as bytes.
 
         Returns:
-            bytes: The bytes of the root hash.
+            Optional[bytes]: The root hash as bytes, or None if tree is empty.
 
         Examples:
             >>> tree = MrkleTree.from_leaves([b"a", b"b"])
             >>> root = tree.root()
             >>> isinstance(root, bytes)
             True
-            >>>
+
             >>> tree = MrkleTree.from_leaves([])
-            >>> tree.root()
+            >>> tree.root() is None
+            True
             >>> tree.is_empty()
+            True
         """
         try:
             return self._inner.root()
         except TreeError:
             return None
+
+    def try_root(self) -> bytes:
+        """Return the root hash as bytes.
+
+        Returns:
+            bytes: The root hash as bytes.
+
+        Raises:
+            TreeError: Raised when the tree is empty and has no root.
+
+        Examples:
+            >>> tree = MrkleTree.from_leaves([b"a", b"b"])
+            >>> root = tree.try_root()
+            >>> isinstance(root, bytes)
+            True
+        """
+        return self._inner.root()
 
     def leaves(self) -> list["MrkleNode"]:
         """Return a list of all leaf nodes in the tree.
@@ -190,7 +212,22 @@ class MrkleTree:
             )
 
     def branch(self, node: Union["MrkleNode", int]) -> "MrkleBranch":
-        """Return a branch iterator of the MrkleTree."""
+        """Return a branch iterator from a leaf node to the root.
+
+        Args:
+            node: Either a MrkleNode instance or an integer index of a node
+                in the tree.
+
+        Returns:
+            MrkleBranch: An iterator that yields nodes from the specified node
+                up to the root.
+
+        Examples:
+            >>> tree = MrkleTree.from_leaves([b"a", b"b", b"c"])
+            >>> branch = tree.branch(0)  # From first leaf
+            >>> for node in branch:
+            ...     print(node.hexdigest())
+        """
         if isinstance(node, MrkleNode):
             index = _find_index_from_node(self, node)
         else:
@@ -246,60 +283,187 @@ class MrkleTree:
         data: Union[str, bytes],
         name: Optional[str] = None,
         *,
-        encoding: Optional[Literal["json", "cbor"]] = None,
+        format: Literal["json"] = "json",
     ) -> "MrkleTree":
-        """Deserialize a tree from string (JSON) or bytes (CBOR).
+        """Deserialize a tree from string or bytes (JSON/CBOR).
 
         Args:
-            data: Serialized tree data (str for JSON, bytes for CBOR).
-            encoding: Serialization format used. Defaults to "cbor".
+            data: Serialized tree data (str or bytes).
+            name: Optional digest algorithm name. If None, will auto-detect from data.
+            format: Serialization format - "json" or "cbor". Defaults to "json".
 
         Returns:
             MrkleTree: Deserialized tree instance.
 
-        Raised:
+        Raises:
             ValueError: Raised when the specified digest algorithm is not
-            recognized in the default registry.
+                recognized in the default registry.
+            SerdeError: Raised when deserialization fails.
 
         Examples:
             >>> tree = MrkleTree.from_leaves([b"a", b"b"], name="sha256")
-            >>> data = tree.dumps(encoding="json")
-            >>> restored = MrkleTree.loads(data, encoding="json")
+            >>> data = tree.dumps(format="json")
+            >>> restored = MrkleTree.loads(data, format="json")
             >>> restored == tree
             True
 
-        """
+            >>> # Auto-detect algorithm from data
+            >>> restored = MrkleTree.loads(data)
 
+            >>> # Specify algorithm explicitly
+            >>> restored = MrkleTree.loads(data, name="sha256", format="json")
+        """
         if name is None:
-            return cls._find_loads(data, encoding=encoding)
+            return cls._find_loads(data)
         else:
             if tree := TREE_MAP.get(name):
-                return MrkleTree(tree.loads(data, encoding=encoding))
+                return MrkleTree(tree.loads(data, format=format))
             else:
                 raise ValueError(
                     f"{name} is not a digest algorithm supported by MrkleTree."
                 )
 
-    def dumps(
-        self,
-        encoding: Optional[Literal["json", "cbor"]] = None,
-    ) -> Union[str, bytes]:
-        """Serialize the tree to string (JSON) or bytes (CBOR).
+    @classmethod
+    def load(
+        cls,
+        fp: File,
+        name: Optional[str] = None,
+        *,
+        format: Literal["json"] = "json",
+    ) -> "MrkleTree":
+        """Deserialize a tree from a file-like object.
 
         Args:
-            encoding: Serialization format - "json" returns str, "cbor" returns bytes.
-            Defaults to "cbor".
+            fp: File-like object to read from (text or binary mode).
+            name: Optional digest algorithm name. If None, will auto-detect from data.
+            format: Serialization format - "json" or "cbor". Defaults to "json".
 
         Returns:
-            Union[str, bytes]: Serialized tree data.
+            MrkleTree: Deserialized tree instance.
+
+        Raises:
+            ValueError: Raised when the specified digest algorithm is not
+                recognized in the default registry.
+            SerdeError: Raised when deserialization fails.
+            IOError: Raised when file reading fails.
 
         Examples:
             >>> tree = MrkleTree.from_leaves([b"a", b"b"], name="sha256")
-            >>> json_str = tree.dumps(encoding="json")
-            >>> cbor_bytes = tree.dumps(encoding="cbor")
-            >>> cbor_default = tree.dumps()  # Uses CBOR by default
+            >>> with open('tree.json', 'w') as f:
+            ...     tree.dumps(fp=f, indent=2)
+
+            >>> # Load from file
+            >>> with open('tree.json', 'r') as f:
+            ...     restored = MrkleTree.load(f)
+
+            >>> # Auto-detect algorithm
+            >>> with open('tree.json', 'r') as f:
+            ...     restored = MrkleTree.load(f)
+
+            >>> # Specify algorithm explicitly
+            >>> with open('tree.sha256.json', 'r') as f:
+            ...     restored = MrkleTree.load(f, name="sha256")
         """
-        return self._inner.dumps(encoding=encoding)
+        if name is None:
+            return cls._find_load(fp, format=format)
+        else:
+            if tree := TREE_MAP.get(name):
+                return MrkleTree(tree.load(fp, format=format))
+            else:
+                raise ValueError(
+                    f"{name} is not a digest algorithm supported by MrkleTree."
+                )
+
+    @classmethod
+    def _find_loads(
+        cls, data: Union[str, bytes], fmt: Literal["json"] = "json"
+    ) -> "MrkleTree":
+        """Auto-detect digest algorithm from serialized data and deserialize.
+
+        Args:
+            data: Serialized tree data.
+            format: Serialization format. Defaults to "json".
+
+        Returns:
+            MrkleTree: Deserialized tree instance.
+
+        Raises:
+            ValueError: If the hash type in data is not recognized.
+            SerdeError: If deserialization fails.
+        """
+
+        metadata = json.loads(data if isinstance(data, str) else data.decode("utf-8"))
+
+        if hash_type := metadata.get("hash_type"):
+            if isinstance(hash_type, str):
+                if tree := TREE_MAP.get(hash_type):
+                    # NOTE: when implement binary update format Literal.
+                    return MrkleTree(tree.loads(data, format=fmt))
+                else:
+                    raise ValueError(
+                        (
+                            f"Hash type '{hash_type}' from data is not supported "
+                            "by MrkleTree."
+                        )
+                    )
+            else:
+                return NotImplemented
+
+        else:
+            raise ValueError("Serialized data does not contain 'hash_type' field")
+
+    @classmethod
+    def _find_load(
+        cls,
+        fp: File,
+        format: Literal["json"],
+    ) -> "MrkleTree":
+        """Auto-detect digest algorithm from file and deserialize.
+
+        Args:
+            fp: File-like object to read from.
+            format: Serialization format. Defaults to "json".
+
+        Returns:
+            MrkleTree: Deserialized tree instance.
+
+        Raises:
+            ValueError: If the hash type in file is not recognized.
+            SerdeError: If deserialization fails.
+        """
+        # Read all data from file
+        data = fp.read()
+        return cls._find_loads(data)
+
+    def dumps(
+        self,
+        fp: Optional[File] = None,
+        *,
+        encoding: Literal["utf-8", "bytes"] = "utf-8",
+        indent: Optional[int] = None,
+    ) -> Optional[Union[str, bytes]]:
+        """Serialize the tree to JSON format.
+
+        Args:
+            fp: Optional file-like object to write to. If provided, returns None.
+            encoding: Output encoding; "utf-8" returns str, "bytes" returns bytes.
+                Defaults to "utf-8".
+            indent: Number of spaces for indentation. None for compact output.
+
+        Returns:
+            Optional[Union[str, bytes]]: Serialized tree data as string or bytes,
+                or None if fp is provided.
+
+        Examples:
+            >>> tree = MrkleTree.from_leaves([b"a", b"b"], name="sha256")
+            >>> json_str = tree.dumps()
+            >>> json_bytes = tree.dumps(encoding="bytes")
+            >>>
+            >>> # Write to file
+            >>> with open('tree.json', 'w') as f:
+            ...     tree.dumps(fp=f, indent=2)  # Returns None
+        """
+        return self._inner.dumps(fp=fp, encoding=encoding, indent=indent)
 
     to_str = to_string
 
@@ -310,37 +474,54 @@ class MrkleTree:
         name: Optional[str] = None,
         *,
         fmt: Literal["flatten", "nested"] = "nested",
+        sep: str = ".",
     ) -> "MrkleTree":
-        """Construct a MrkleTree from a dict.
+        """Construct a MrkleTree from a tree-like dict.
+
+        A tree-like dictionary is defined as a dictionary that contains only leaves.
+        The depth of the tree can be represented as nested or flattened.
+
+        Args:
+            data: Dictionary containing the tree data.
+            name: Name of the digest algorithm (defaults to "sha1").
+            fmt: Format of the input dictionary - "flatten" for dot-separated keys
+                or "nested" for recursive dictionaries (default: "nested").
+            sep: Separator character used for flattened keys (default: ".").
 
         Returns:
             MrkleTree: A new tree instance built from the given dictionary data.
 
-        Raised:
+        Raises:
             ValueError: Raised when the specified digest algorithm is not
-            recognized in the default registry.
-            AssertionError: If the tree's digest type doesn't match the
-            provided digest type.
+                recognized in the default registry.
 
-        # Example
+        Note:
+            - Flatten format: defines the depth within the key using a separator
+              (e.g., "a.b.c" represents nested path a -> b -> c)
+            - Nested format: defines a recursive dictionary where only the leaf
+              nodes contain values
+
+        Example:
             >>> from mrkle import MrkleTree
-            >>> data = { "a.a" : b"let", "a.b" : b"a", "a.c.b" : b"=", "a.c.a" : b"1" }
-            >>> tree = MrkleTree.from_dict(data, fmt="flatten")
-            >>> tree.root().hex()
+            >>> data = {"a.a": b"let", "a.b": b"a", "a.c.b": b"=", "a.c.a": b"1"}
+            >>> tree_flatten = MrkleTree.from_dict(data, fmt="flatten")
+            >>> tree_flatten.root().hex()
             '34e31fe4180705565b3bb314ad56a3f513616e29'
+            >>> data = {'a': {'a': b'let', 'b': b'a', 'c': {'a': b'=', 'b': b'1'}}}
+            >>> tree_unflatten = MrkleTree.from_dict(data)
+            >>> assert tree_unflatten == tree_flatten
+            >>>
         """
         if name is None:
             name = "sha1"
         digest = new(name)
         name = digest.name()
-
         # NOTE: need to test between rust impl
         # and python impl to see if there is
         # some speed improvments in speed
         # handling it \w in rust runtime.
         if fmt == "flatten":
-            data = unflatten(data)
-
+            data = unflatten(data, sep=sep)
         if inner := TREE_MAP.get(name):
             return cls._construct_tree_backend(inner.from_dict(data=data))
         else:
@@ -368,55 +549,14 @@ class MrkleTree:
         object.__setattr__(obj, "_inner", tree)
         return obj
 
-    @classmethod
-    def _find_loads(
-        cls,
-        data: Union[str, bytes],
-        encoding: Optional[Literal["json", "cbor"]] = None,
-    ) -> "MrkleTree":
-        """Internal method to find the correct tree type and deserialize.
-
-        Args:
-            data: Serialized tree data.
-            encoding: Serialization format used.
-
-        Returns:
-            MrkleTree: Deserialized tree instance.
-
-        Raises:
-            SerdeError: If deserialization fails for all tree types.
-            AssertionError: If the tree’s digest type doesn’t match the
-            provided digest type.
-        """
-
-        for tree in TREE_MAP.values():
-            try:
-                inner = tree.loads(data, encoding=encoding)
-                return cls._construct_tree_backend(inner)
-            except AssertionError as e:
-                # NOTE: this only should thrown when the
-                # construct does not match the inner backend
-                # for example MrkleNodeSha1, and dtype sha224.
-                raise e
-            except MerkleError:
-                # NOTE: MrkleError abstract over the SerdeError thrown
-                # we ignore until a possible match. else we raise
-                # our serde.
-                continue
-
-        raise SerdeError("Could not deserialize tree from given data.")
+    @overload
+    def __getitem__(self, key: int) -> MrkleNode: ...
 
     @overload
-    def __getitem__(self, key: int) -> MrkleNode:
-        ...
+    def __getitem__(self, key: slice) -> list[MrkleNode]: ...
 
     @overload
-    def __getitem__(self, key: slice) -> list[MrkleNode]:
-        ...
-
-    @overload
-    def __getitem__(self, key: Sequence[int]) -> list[MrkleNode]:
-        ...
+    def __getitem__(self, key: Sequence[int]) -> list[MrkleNode]: ...
 
     def __getitem__(
         self, key: Union[int, slice, Sequence[int]]
@@ -430,9 +570,8 @@ class MrkleTree:
             Union[list[MrkleNode], MrkleNode]: A list of nodes or single node.
 
         Raises:
-            TypeError: Rasied if the key type is invalid.
-            IndexError: Rasied with key is out of range.
-
+            TypeError: Raised if the key type is invalid.
+            IndexError: Raised when key is out of range.
         """
         return self._inner[key]
 
@@ -523,22 +662,23 @@ class MrkleTree:
 
     @override
     def __str__(self) -> str:
-        """Return a human-readable string representation of the tree.
+        """Return a human-readable string representation of the proof.
 
         Returns:
-            str: Basic representation showing root hash prefix, length,
+            str: Basic representation showing expected hash prefix, length,
                 and digest type.
 
         Examples:
             >>> tree = MrkleTree.from_leaves([b"a", b"b"])
             >>> str(tree)
-            'MrkleTree(root=0056, length=3, dtype=sha1)'
+            'MrkleTree(expected=ce7a, length=3, dtype=sha1)'
         """
-        root: str = self._inner.root().hex()
-        return (
-            f"MrkleTree(root={root[0 : min(len(root), 4)]},"
-            f" length={len(self)}, dtype={self._inner.dtype().name()!s})"
-        )
+        root = self.root()
+        expected = root[:4].hex() if root else None
+        length = len(self) if root else 0
+        dtype = self.dtype().name()
+
+        return f"MrkleTree(root={expected}, length={length}, dtype={dtype})"
 
     @override
     def __format__(self, format_spec: str, /) -> str:
@@ -579,6 +719,11 @@ class MrkleProof:
     __slots__ = ("_inner", "_dtype_name")
 
     def __init__(self, proof: Proof_T) -> None:
+        """Initialize a MrkleProof instance.
+
+        Args:
+            proof: The underlying Rust-based proof instance.
+        """
         self._inner = proof
         self._dtype_name = proof.dtype().name()
 
@@ -687,96 +832,8 @@ class MrkleProof:
 
     to_str = to_string
 
-    def dumps(
-        self,
-        encoding: Optional[Literal["json", "cbor"]] = None,
-        **kwargs: dict[str, Any],
-    ) -> bytes:
-        """Serialize a tree into json string or cbor bytes.
-
-        Args:
-            encoding: Serialization format used. Defaults to "cbor".
-
-        Raises:
-            ValueError: Raised when unable to convert into proper encoding type.
-            SerdeError: Raised when the data cannot be deserialized into a valid object.
-        """
-        if encoding is None:
-            encoding = "cbor"
-        return self._inner.dumps(encoding)
-
-    @classmethod
-    def loads(
-        cls,
-        data: Union[str, bytes],
-        encoding: Optional[Literal["json", "cbor"]] = None,
-        *,
-        name: Optional[str] = None,
-    ) -> "MrkleProof":
-        """Deserialize a Merkle Tree from a string (JSON) or bytes (CBOR).
-
-        Args:
-            data (str | bytes): Serialized tree data.
-                - Use ``str`` for JSON-encoded input.
-                - Use ``bytes`` for CBOR-encoded input.
-            encoding (str, optional): Serialization format.
-                Must be either ``"json"`` or ``"cbor"``. Defaults to ``"cbor"``.
-            name (str, optional): Name of the digest algorithm used for hashing.
-
-        Returns:
-            MrkleTree: Deserialized Merkle Tree instance.
-
-        Raises:
-            ValueError: If the input cannot be interpreted as the specified encoder.
-            SerdeError: If deserialization fails or the data is invalid.
-
-        Examples:
-            >>> tree = MrkleTree.from_leaves([b"a", b"b"], name="sha256")
-            >>> data = tree.dumps(encoding="json")
-            >>> restored = MrkleTree.loads(data, encoding="json")
-            >>> restored == tree
-            True
-        """
-
-        if name is None:
-            return cls._find_loads(data, encoding=encoding)
-        else:
-            if tree := PROOF_MAP.get(name):
-                return MrkleProof(tree.loads(data, encoding=encoding))
-            else:
-                raise ValueError(
-                    f"{name} is not a digest algorithm supported by MrkleTree."
-                )
-
-    @classmethod
-    def _find_loads(
-        cls,
-        data: Union[str, bytes],
-        encoding: Optional[Literal["json", "cbor"]] = None,
-    ) -> "MrkleProof":
-        """Internal method to find the correct tree type and deserialize.
-
-        Args:
-            data(str | bytes): Serialized tree data.
-            encoding(str, optional) Serialization format used.
-
-        Returns:
-            MrkleProof: Deserialized tree instance.
-
-        Raises:
-            SerdeError: Raised when deserialization fails for all tree types.
-        """
-
-        for _, tree in PROOF_MAP.items():
-            try:
-                inner = tree.loads(data, encoding=encoding)
-                return cls(inner)
-            except SerdeError:
-                continue
-
-        raise SerdeError("Could not deserialize tree from given data.")
-
     def __len__(self) -> int:
+        """Return length of nodes within the tree."""
         return len(self._inner)
 
     @override
@@ -795,25 +852,23 @@ class MrkleProof:
 
     @override
     def __str__(self) -> str:
-        """Return a human-readable string representation of the tree.
+        """Return a human-readable string representation of the proof.
 
         Returns:
-            str: Basic representation showing root hash prefix, length,
+            str: Basic representation showing expected hash prefix, length,
                 and digest type.
 
         Examples:
             >>> tree = MrkleTree.from_leaves([b"a", b"b"])
-            >>> leaf = tree.leaves()[0]
             >>> proof = tree.generate_proof(0)
-            >>> str(tree)
-            'MrkleProof(root=ce7a, length=3, dtype=sha1)'
+            >>> str(proof)
+            'MrkleProof(expected=ce7a, length=3, dtype=sha1)'
         """
+        root = self._inner.expected_hexdigest()
+        expected = root[:4] if root else None
+        length = len(self)
 
-        root: str = self._inner.expected_hexdigest()
-        return (
-            f"MrkleProof(expected={root[0 : min(len(root), 4)]},"
-            f" length={len(self)}, dtype={self._dtype_name!s})"
-        )
+        return f"MrkleProof(expected={expected}, length={length}, dtype={self._dtype_name})"
 
     @override
     def __format__(self, format_spec: str, /) -> str:

@@ -1,3 +1,4 @@
+import io
 import sys
 from typing import Union, runtime_checkable, Protocol
 from typing_extensions import TypeAlias
@@ -31,7 +32,6 @@ else:
         Buffer,
     ]
 
+File = Union[io.TextIOBase, io.BufferedIOBase, io.RawIOBase]
 
-__all__ = [
-    "BufferLike",
-]
+__all__ = ["BufferLike", "File"]

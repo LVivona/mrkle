@@ -10,7 +10,7 @@ crate-type = ["cdylib"]
 [dependencies]
 mrkle = { path = "../../mrkle", default-features = false, features = ["std", "serde"] }
 hex = "0.4.3"
-
+pyo3-file = "0.14.0"
 serde = { workspace = true }
 serde_json = { workspace = true }
 serde_cbor = { workspace = true }
