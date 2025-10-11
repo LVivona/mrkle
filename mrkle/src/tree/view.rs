@@ -96,8 +96,8 @@ impl<'s, N: Node<Ix>, Ix: IndexType> IntoIterator for TreeView<'s, N, Ix> {
 #[cfg(test)]
 mod test {
 
-    use super::super::node::BasicNode as Node;
     use crate::prelude::*;
+    use crate::tree::node::DefaultNode as Node;
     use crate::{NodeIndex, Tree};
 
     #[test]

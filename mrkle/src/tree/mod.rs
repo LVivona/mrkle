@@ -724,7 +724,7 @@ where
 #[cfg(test)]
 mod test {
 
-    use super::node::BasicNode as Node;
+    use super::node::DefaultNode as Node;
     use crate::{MutNode, prelude::*};
     use crate::{NodeIndex, Tree};
 
