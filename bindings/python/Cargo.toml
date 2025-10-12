@@ -1,7 +1,8 @@
 [package]
 name = "mrkle_py"
-version = "0.0.1"
-edition = "2021"
+edition = { workspace = true }
+version = { workspace = true }
+license = { workspace = true }
 
 [lib]
 name = "mrkle_rs"
@@ -9,15 +10,14 @@ crate-type = ["cdylib"]
 
 [dependencies]
 mrkle = { path = "../../mrkle", default-features = false, features = ["std", "serde"] }
-hex = "0.4.3"
-pyo3-file = "0.14.0"
+
 serde = { workspace = true }
 serde_json = { workspace = true }
-serde_cbor = { workspace = true }
-bincode = { workspace = true }
-
 
 pyo3 = { workspace = true }
+pyo3-file = { workspace = true }
+
+faster-hex = { workspace = true }
 
 sha1 = { workspace = true }
 sha2 = { workspace = true }
