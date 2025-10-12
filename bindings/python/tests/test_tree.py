@@ -51,7 +51,7 @@ def test_from_dict_nested():
 
 def test_from_dict_flattened():
     tree = MrkleTree.from_dict(
-        {"a.a": b"hello", "a.b": b"world", "a.c": "!"}, fmt="flatten"
+        {"a.a": b"hello", "a.b": b"world", "a.c": "!"}, format="flatten"
     )
     assert len(tree) == 4
 
