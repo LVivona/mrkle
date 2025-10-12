@@ -10,6 +10,7 @@
 //! that a set of leaves belongs to a specific Merkle root without access to
 //! the entire tree.
 
+use crate::prelude::*;
 use crate::{
     Digest, GenericArray, Hasher, IndexType, MrkleHasher, MrkleTree, Node, NodeIndex, ProofError,
     TreeError,
@@ -477,9 +478,12 @@ impl<'de, D: Digest> serde::Deserialize<'de> for ProofPath<D> {
 
 #[cfg(test)]
 mod test {
+
     use super::*;
+    use crate::GenericArray;
 
     #[test]
+    #[cfg(feature = "std")]
     fn test_single_mrkle_proof() {
         let tree = MrkleTree::<&str, sha1::Sha1>::from_leaves(vec!["a", "b", "c"]).unwrap();
 
@@ -513,7 +517,7 @@ mod test {
 
         // Verify proof for each leaf
         for (i, &leaf_idx) in leaf_indices.iter().enumerate() {
-            let proof = ProofPath::generate(&tree, root, (i as u32).into()).unwrap();
+            let proof = ProofPath::<sha1::Sha1>::generate(&tree, root, (i as u32).into()).unwrap();
             let leaf_hash = tree.get(leaf_idx.index()).unwrap().hash.as_slice();
             let computed_root = proof.traverse(leaf_hash);
 
@@ -531,7 +535,7 @@ mod test {
         let tree = MrkleTree::<&str, sha1::Sha1>::from_leaves(vec!["single"]).unwrap();
         let root = tree.core.start().unwrap();
 
-        let proof = ProofPath::generate(&tree, root, 0.into()).unwrap();
+        let proof = ProofPath::<sha1::Sha1>::generate(&tree, root, 0.into()).unwrap();
         let leaf_hash = tree
             .get(tree.leaf_indices()[0].index())
             .unwrap()
@@ -707,8 +711,8 @@ mod test {
         let root = tree.core.start().unwrap();
 
         // Generate the same proof twice
-        let proof1 = ProofPath::generate(&tree, root, 1.into()).unwrap();
-        let proof2 = ProofPath::generate(&tree, root, 1.into()).unwrap();
+        let proof1 = ProofPath::<sha1::Sha1>::generate(&tree, root, 1.into()).unwrap();
+        let proof2 = ProofPath::<sha1::Sha1>::generate(&tree, root, 1.into()).unwrap();
 
         // Both proofs should produce the same result
         let leaf_hash = tree
@@ -716,8 +720,8 @@ mod test {
             .unwrap()
             .hash
             .as_slice();
-        let root1 = proof1.traverse(leaf_hash);
-        let root2 = proof2.traverse(leaf_hash);
+        let root1: GenericArray<sha1::Sha1> = proof1.traverse(leaf_hash);
+        let root2: GenericArray<sha1::Sha1> = proof2.traverse(leaf_hash);
 
         assert_eq!(root1, root2);
         assert_eq!(root1, *tree.root_hash());
