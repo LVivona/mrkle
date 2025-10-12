@@ -44,7 +44,7 @@ pub trait PyDigest: Sized + Clone + Send + Sync {
 
 macro_rules! py_digest {
     ($classname:tt, $name:ident, $digest:ty, $size:ty, $output:tt) => {
-        #[derive(Clone)]
+        #[derive(Debug, Clone)]
         #[pyclass(name = $classname, eq)]
         pub struct $name($digest);
 
