@@ -13,11 +13,12 @@ use pyo3::prelude::*;
 use pyo3::pycell::PyRef;
 use pyo3::sync::OnceLockExt;
 use pyo3::types::{PyAny, PyBytes, PyDict, PyIterator, PyList, PySequence, PySlice, PyType};
-use pyo3::{intern, Bound as PyBound, Py};
+use pyo3::{Bound as PyBound, Py, intern};
 
 use pyo3_file::PyFileLikeObject;
 
 use crate::{
+    MRKLE_MODULE,
     codec::{JsonCodec, MerkleTreeJson, PyCodecFormat},
     crypto::{
         PyBlake2b512Wrapper, PyBlake2s256Wrapper, PyKeccak224Wrapper, PyKeccak256Wrapper,
@@ -26,7 +27,6 @@ use crate::{
     },
     errors::{NodeError as PyNodeError, SerdeError, TreeError},
     utils::extract_to_bytes,
-    MRKLE_MODULE,
 };
 
 use mrkle::error::NodeError;
@@ -156,7 +156,7 @@ macro_rules! py_mrkle_node {
 
             #[inline]
             fn hexdigest(&self) -> String {
-                hex::encode(self.inner.hash())
+                faster_hex::hex_string(self.inner.hash())
             }
 
             #[inline]

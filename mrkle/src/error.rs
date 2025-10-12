@@ -129,9 +129,14 @@ pub enum ProofError {
     #[error("Expected a tree length greater then 1.")]
     InvalidSize,
 
-    /// Expected leaf hashes to be updated to expected hashes.
-    #[error("Missing leaf hashes")]
-    IncompleteProof,
+    /// Number of expected leaf hashes not met to finish proof.
+    #[error("Expected {expected} hashes, and got only {len}")]
+    IncompleteProof {
+        /// lengths of leaves to verify.
+        len: usize,
+        /// expected leaves to verify.
+        expected: usize,
+    },
 
     /// The computed root hash does not match the expected root hash.
     ///
@@ -145,9 +150,9 @@ pub enum ProofError {
         actual: Vec<u8>,
     },
 
-    /// The Leaf should have a hash value.
-    #[error("Expected a leaf hash but no leaf hash was allocated.")]
-    ExpectedLeafHash,
+    /// The path from the node does not meet the root.
+    #[error("Expected root index {0}, got {1}")]
+    PathRootMismatch(usize, usize),
 
     /// An error occurred while constructing or manipulating a [`Tree`](crate::tree::Tree).
     #[error("{0}")]

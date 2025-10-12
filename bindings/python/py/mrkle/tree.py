@@ -376,7 +376,7 @@ class MrkleTree:
 
     @classmethod
     def _find_loads(
-        cls, data: Union[str, bytes], fmt: Literal["json"] = "json"
+        cls, data: Union[str, bytes], *, format: Literal["json"] = "json"
     ) -> "MrkleTree":
         """Auto-detect digest algorithm from serialized data and deserialize.
 
@@ -398,7 +398,7 @@ class MrkleTree:
             if isinstance(hash_type, str):
                 if tree := TREE_MAP.get(hash_type):
                     # NOTE: when implement binary update format Literal.
-                    return MrkleTree(tree.loads(data, format=fmt))
+                    return MrkleTree(tree.loads(data, format=format))
                 else:
                     raise ValueError(
                         (
@@ -416,7 +416,8 @@ class MrkleTree:
     def _find_load(
         cls,
         fp: File,
-        format: Literal["json"],
+        *,
+        format: Literal["json"] = "json",
     ) -> "MrkleTree":
         """Auto-detect digest algorithm from file and deserialize.
 
@@ -433,7 +434,7 @@ class MrkleTree:
         """
         # Read all data from file
         data = fp.read()
-        return cls._find_loads(data)
+        return cls._find_loads(data, format=format)
 
     def dumps(
         self,
@@ -473,7 +474,7 @@ class MrkleTree:
         data: dict[str, Any],
         name: Optional[str] = None,
         *,
-        fmt: Literal["flatten", "nested"] = "nested",
+        format: Literal["flatten", "nested"] = "nested",
         sep: str = ".",
     ) -> "MrkleTree":
         """Construct a MrkleTree from a tree-like dict.
@@ -484,7 +485,7 @@ class MrkleTree:
         Args:
             data: Dictionary containing the tree data.
             name: Name of the digest algorithm (defaults to "sha1").
-            fmt: Format of the input dictionary - "flatten" for dot-separated keys
+            format: Format of the input dictionary - "flatten" for dot-separated keys
                 or "nested" for recursive dictionaries (default: "nested").
             sep: Separator character used for flattened keys (default: ".").
 
@@ -504,7 +505,7 @@ class MrkleTree:
         Example:
             >>> from mrkle import MrkleTree
             >>> data = {"a.a": b"let", "a.b": b"a", "a.c.b": b"=", "a.c.a": b"1"}
-            >>> tree_flatten = MrkleTree.from_dict(data, fmt="flatten")
+            >>> tree_flatten = MrkleTree.from_dict(data, format="flatten")
             >>> tree_flatten.root().hex()
             '34e31fe4180705565b3bb314ad56a3f513616e29'
             >>> data = {'a': {'a': b'let', 'b': b'a', 'c': {'a': b'=', 'b': b'1'}}}
@@ -520,7 +521,7 @@ class MrkleTree:
         # and python impl to see if there is
         # some speed improvments in speed
         # handling it \w in rust runtime.
-        if fmt == "flatten":
+        if format == "flatten":
             data = unflatten(data, sep=sep)
         if inner := TREE_MAP.get(name):
             return cls._construct_tree_backend(inner.from_dict(data=data))
@@ -764,24 +765,8 @@ class MrkleProof:
                 f"{name!r} is not a digest algorithm supported by MrkleTree."
             )
 
-    def update(self, leaves: Union[bytes, list[bytes], str, list[str]]) -> None:
-        """Update the proof with new leaf values.
-
-        Args:
-            leaves: A single leaf (bytes or hex str) or a list of leaves.
-
-        Examples:
-            >>> tree = MrkleTree.from_leaves([b"a", b"b"])
-            >>> proof = tree.generate_proof(0)
-            >>> leaf = tree.leaves()[0]
-            >>> proof.update(leaf.digest())
-            >>> proof.validate()
-            True
-        """
-        self._inner.update(leaves)
-
-    def validate(self) -> bool:
-        """Validate this proof against a given root hash.
+    def verify(self, leaves: Union[Sequence[str], Sequence[bytes]]) -> bool:
+        """Verify if the expected digest belongs to the tree.
 
         Returns:
             bool: True if the proof is valid, False otherwise.
@@ -791,27 +776,17 @@ class MrkleProof:
             >>>
             >>> tree = MrkleTree.from_leaves([b"a", b"b"], name="sha256")
             >>> proof = tree.generate_proof(0)
-            >>> leaf = tree.leaves()[1]
-            >>> proof.update(leaf.digest())
-            >>> proof.validate()
+            >>> leaf = tree[1]
+            >>> proof.verify(leaf.digest())
             False
             >>>
-            >>> proof.refresh()
-            >>> leaf = tree.leaves()[0]
-            >>> proof.update(leaf.digest())
-            >>> proof.validate()
+            >>> leaf = tree[0]
+            >>> proof.verify(leaf.digest())
             True
 
         """
-        return self._inner.validate()
 
-    def try_validate(self) -> bool:
-        """Validate this proof against a given root hash, return exception if false."""
-        return self._inner.try_validate()
-
-    def refresh(self) -> None:
-        """Reset this proof."""
-        return self._inner.refresh()
+        return self._inner.verify(leaves=leaves)
 
     def dtype(self) -> Digest:
         """Return the digest type used by this tree.
@@ -820,17 +795,6 @@ class MrkleProof:
             Digest: The digest algorithm instance (e.g., Sha1(), Sha256()).
         """
         return new(self._dtype_name)
-
-    def to_string(self) -> str:
-        """Pretty print of MrkleProof.
-
-        Returns:
-           str: A pretty print string of a tree.
-
-        """
-        return self._inner.to_string()
-
-    to_str = to_string
 
     def __len__(self) -> int:
         """Return length of nodes within the tree."""
@@ -845,8 +809,9 @@ class MrkleProof:
 
         Examples:
             >>> tree = MrkleTree.from_leaves([b"a"], name="sha256")
-            >>> repr(tree)
-            '<sha256 mrkle.tree.MrkleTree object at 0x...>'
+            >>> proof = tree.generate_proof(0)
+            >>> repr(proof)
+            '<sha256 mrkle.tree.MrkleProof object at 0x...>'
         """
         return f"<{self._dtype_name} mrkle.tree.MrkleProof object at {hex(id(self))}>"
 
@@ -862,13 +827,12 @@ class MrkleProof:
             >>> tree = MrkleTree.from_leaves([b"a", b"b"])
             >>> proof = tree.generate_proof(0)
             >>> str(proof)
-            'MrkleProof(expected=ce7a, length=3, dtype=sha1)'
+            'MrkleProof(expected=ce7a, dtype=sha1)'
         """
         root = self._inner.expected_hexdigest()
         expected = root[:4] if root else None
-        length = len(self)
 
-        return f"MrkleProof(expected={expected}, length={length}, dtype={self._dtype_name})"
+        return f"MrkleProof(expected={expected}, dtype={self._dtype_name})"
 
     @override
     def __format__(self, format_spec: str, /) -> str:
@@ -884,6 +848,24 @@ class MrkleProof:
 
 
 class MrkleBranch(Iterable[MrkleNode]):
+    """MrkleTree branch iterator pattern.
+
+    This class provieds a iterator over a singluar branch over a MrkleTree
+    traversing from the child to the parent.
+
+    Example:
+        >>> from mrkle.tree import MrkleTree
+        >>> data = {'a': {'a': b'let', 'b': b'a', 'c': {'a': b'=', 'b': b'1'}}}
+        >>> tree = MrkleTree.from_dict(data)
+        >>> node = tree[0]
+        >>> branch = tree.branch(node)
+        >>> for n in branch:
+        ...     print(n)
+        ...
+        MrkleNode(id=0262, leaf=True, dtype=sha1)
+        MrkleNode(id=34e3, leaf=False, dtype=sha1)
+    """
+
     _tree: MrkleTree
     _cursor: MrkleNode | None
     __slots__: tuple[str, ...] = ("_tree", "_cursor")

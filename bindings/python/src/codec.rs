@@ -122,7 +122,7 @@ mod hex_serde {
     where
         S: Serializer,
     {
-        serializer.serialize_str(&hex::encode(bytes))
+        serializer.serialize_str(faster_hex::hex_string(&bytes).as_str())
     }
 
     pub fn deserialize<'de, D>(deserializer: D) -> Result<Vec<u8>, D::Error>
@@ -130,6 +130,9 @@ mod hex_serde {
         D: Deserializer<'de>,
     {
         let s = String::deserialize(deserializer)?;
-        hex::decode(s).map_err(serde::de::Error::custom)
+        let mut buffer = vec![0; s.len() / 2];
+        faster_hex::hex_decode(s.as_bytes(), &mut buffer)
+            .map_err(|e| serde::de::Error::custom(e.to_string()))?;
+        Ok(buffer)
     }
 }

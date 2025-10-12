@@ -38,7 +38,7 @@ pub(crate) use crate::tree::DefaultIx;
 
 pub use crate::builder::MrkleDefaultBuilder;
 pub use crate::hasher::{GenericArray, Hasher, MrkleHasher};
-pub use crate::proof::{MrkleProof, MrkleProofNode};
+pub use crate::proof::{MrkleProof, ProofLevel, ProofPath};
 pub use crate::tree::{IndexIter, IndexType, Iter, MutNode, Node, NodeIndex, Tree, TreeView};
 pub use borrowed::*;
 
@@ -863,55 +863,6 @@ where
     /// ```
     pub fn from_leaves(leaves: Vec<T>) -> Result<MrkleTree<T, D, Ix>, MrkleError> {
         MrkleDefaultBuilder::build_from_data(leaves)
-
-        // let mut tree = Tree::new();
-
-        // if leaves.is_empty() {
-        //     return Self { core: tree };
-        // }
-
-        // let hasher = MrkleHasher::<D>::new();
-
-        // // Handle single leaf case
-        // if leaves.len() == 1 {
-        //     let payload = leaves.pop().unwrap();
-
-        //     let hash = hasher.hash(&payload);
-        //     let leaf = MrkleNode::leaf_with_hash(payload, hash.clone());
-        //     let leaf_idx = tree.push(leaf);
-
-        //     let hash = hasher.hash(&hash);
-        //     let root = MrkleNode::internal(vec![leaf_idx], hash);
-        //     let root_idx = tree.push(root);
-        //     tree.nodes[leaf_idx.index()].parent = Some(root_idx);
-        //     tree.root = Some(root_idx);
-
-        //     return Self { core: tree };
-        // }
-
-        // let mut queue: VecDeque<NodeIndex<Ix>> = VecDeque::new();
-        // for payload in leaves {
-        //     let idx = tree.push(MrkleNode::leaf(payload));
-        //     queue.push_back(idx);
-        // }
-
-        // while queue.len() > 1 {
-        //     let lhs = queue.pop_front().unwrap();
-        //     let rhs = queue.pop_front().unwrap();
-
-        //     let hash = hasher.concat(&tree.nodes[lhs.index()].hash, &tree.nodes[rhs.index()].hash);
-
-        //     let parent_idx = tree.push(MrkleNode::internal(vec![lhs, rhs], hash));
-
-        //     tree.nodes[lhs.index()].parent = Some(parent_idx);
-        //     tree.nodes[rhs.index()].parent = Some(parent_idx);
-
-        //     queue.push_back(parent_idx);
-        // }
-
-        // tree.root = queue.pop_front();
-
-        // Self { core: tree }
     }
 }
 
@@ -1022,9 +973,22 @@ impl<T, D: Digest, Ix: IndexType> MrkleTree<T, D, Ix> {
     }
 
     /// Generate [`MrkleProof`] from a leaf index within the [`MrkleTree`]
-    pub fn generate_proof(&self, index: Vec<NodeIndex<Ix>>) -> MrkleProof<D, Ix>
+    pub fn generate_proof(&self, index: Vec<NodeIndex<Ix>>) -> MrkleProof<D>
 where {
-        MrkleProof::generate(self, index).unwrap()
+        MrkleProof::generate_basic(self, &index).unwrap()
+    }
+
+    /// Verify if leaves belong to [`MrkleProof`].
+    pub fn verify(proof: &MrkleProof<D>, data: Vec<T>) -> Result<bool, ProofError>
+    where
+        T: AsRef<[u8]>,
+    {
+        let leaves = data
+            .iter()
+            .map(|item| D::digest(item))
+            .collect::<Vec<GenericArray<D>>>();
+
+        proof.verify(leaves)
     }
 }
 
@@ -1200,7 +1164,7 @@ where
 #[cfg(test)]
 mod test {
 
-    use crate::{MrkleHasher, MrkleNode, MrkleTree, Node, NodeIndex, prelude::*};
+    use crate::{MrkleHasher, MrkleNode, MrkleTree, Node, prelude::*};
     use sha1::Digest;
 
     const DATA_PAYLOAD: [u8; 32] = [0u8; 32];
@@ -1264,12 +1228,11 @@ mod test {
     fn test_building_binary_tree_proof() {
         let leaves: Vec<&str> = vec!["A", "B", "C", "D", "E"];
         let tree = MrkleTree::<&str, sha1::Sha1>::from(leaves.clone());
-        let mut proof = tree.generate_proof(vec![NodeIndex::new(4)]);
-        proof
-            .update_leaf_hash(0, tree.get(4).unwrap().hash().clone())
-            .unwrap();
+        let proof = tree.generate_proof(vec![0.into()]);
 
-        assert!(proof.try_validate_basic().is_ok())
+        let result = MrkleTree::<&str, sha1::Sha1>::verify(&proof, vec!["A"]);
+        assert!(result.is_ok());
+        assert!(result.unwrap());
     }
 
     #[cfg(feature = "serde")]
