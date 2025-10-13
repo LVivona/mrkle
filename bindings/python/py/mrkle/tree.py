@@ -243,6 +243,7 @@ class MrkleTree:
             int,
             slice,
             Sequence[int],
+            Sequence[MrkleNode],
             "MrkleNode",
         ],
     ) -> "MrkleProof":
@@ -748,7 +749,9 @@ class MrkleProof:
 
     @classmethod
     def generate(
-        cls, tree: "MrkleTree", leaves: Union[int, slice, Sequence[int], "MrkleNode"]
+        cls,
+        tree: "MrkleTree",
+        leaves: Union[int, slice, Sequence[int], Sequence[MrkleNode], "MrkleNode"],
     ) -> "MrkleProof":
         """Generate MrkleProof from MrkleTree, and leaf index.
 

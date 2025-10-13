@@ -35,7 +35,7 @@ def test_from_multiple_leaves():
     assert proof.verify(nodes)
 
 
-def test_from_multiple_leaves():
+def test_from_non_leaf():
     tree = MrkleTree.from_leaves(["a", "b", "c"])
     with pytest.raises(ProofError) as _:
         node = tree[3]
