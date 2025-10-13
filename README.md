@@ -4,7 +4,7 @@
   </picture>
 </p>
 <p align="center">
-  <a href="https://github.com/LVivona/mrkle/blob/main/LICENSE-APACHE.md"><img src="https://img.shields.io/badge/license-APACHE-2.0-blue.svg" alt="License"></a>
+  <a href="https://github.com/LVivona/mrkle/blob/main/LICENSE-APACHE.md"><img src="https://img.shields.io/badge/license-Apache_2.0-blue.svg" alt="License"></a>
   <a href="https://github.com/LVivona/mrkle/blob/main/LICENSE-MIT.md"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License"></a>
   <a href="https://crates.io/crates/mrkle"><img alt="Crates.io Version" src="https://img.shields.io/crates/v/mrkle"></a>
   <a href="https://docs.rs/mrkle"><img alt="docs.rs" src="https://img.shields.io/badge/rust-docs.rs-lightgray?logo=rust&logoColor=orange"></a>
