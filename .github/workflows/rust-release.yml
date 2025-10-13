@@ -26,6 +26,5 @@ jobs:
         run: cargo publish --dry-run
 
       - name: Publish package rust
-        if: ${{ !contains(github.ref, 'rc') }}
         working-directory: ./mrkle
         run: cargo publish --token ${CRATES_TOKEN}
