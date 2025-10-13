@@ -1,5 +1,5 @@
 import pytest
-from mrkle import MrkleTree
+from mrkle.tree import MrkleTree
 from mrkle.crypto import Sha1
 
 
@@ -238,3 +238,33 @@ def test_from_iter_leaves():
     leaves = iter([b"a", b"b", b"c"])
     tree = MrkleTree.from_leaves(leaves)
     assert isinstance(tree, MrkleTree)
+
+
+def test_tree_branch():
+    leaves = iter([b"a", b"b", b"c"])
+    tree = MrkleTree.from_leaves(leaves)
+    leaf = tree[0]
+    branch = tree.branch(tree[0])
+    current = leaf
+    for node in branch:
+        assert current == node
+        if parent := current.parent():
+            current = tree[parent]
+
+
+def test_tree_branch_out_of_bounds():
+    with pytest.raises(IndexError) as _:
+        # NOTE: out of bounds there exist only
+        # 5 nodes.
+        tree = MrkleTree.from_leaves(iter([b"a", b"b", b"c"]))
+        _ = tree.branch(7)
+
+
+def test_tree_branch_root():
+    leaves = iter([b"a", b"b", b"c"])
+    tree = MrkleTree.from_leaves(leaves)
+    branch = tree.branch(-1)
+    # NOTE: starting from the root the only node
+    # to iter is the root node.
+    for node in branch:
+        assert tree[-1] == node

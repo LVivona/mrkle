@@ -1,5 +1,6 @@
 from collections.abc import Mapping, Sequence
-from typing import Any, Union, Final, Optional, Literal
+from typing import Union, Final
+from mrkle.node import MrkleNode
 from typing_extensions import TypeAlias, override
 
 from mrkle.tree import MrkleTree
@@ -33,7 +34,12 @@ class BaseMrkleProof:
     ) -> "Proof_T": ...
     @staticmethod
     def dtype() -> Digest: ...
-    def verify(self, leaves: Union[Sequence[str], Sequence[bytes]]) -> bool: ...
+    def verify(
+        self,
+        leaves: Union[
+            Sequence[str], Sequence[bytes], Sequence[MrkleNode], str, bytes, MrkleNode
+        ],
+    ) -> bool: ...
     def __len__(self) -> int: ...
     @override
     def __repr__(self) -> str: ...

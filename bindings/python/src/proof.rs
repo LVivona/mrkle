@@ -4,8 +4,8 @@ use pyo3::sync::OnceLockExt;
 
 use pyo3::Bound as PyBound;
 
-use pyo3::exceptions::{PyIndexError, PyValueError};
-use pyo3::types::{PyModule, PyType};
+use pyo3::exceptions::{PyIndexError, PyTypeError, PyValueError};
+use pyo3::types::{PyModule, PySequence, PyType};
 
 use mrkle::error::{ProofError, TreeError};
 use mrkle::{GenericArray, MrkleProof, Node, NodeIndex, ProofLevel, ProofPath};
@@ -19,14 +19,17 @@ use crate::{
     },
     errors::{ProofError as PyProofError, TreeError as PyTreeError},
     tree::{
-        PyMrkleTreeBlake2b, PyMrkleTreeBlake2s, PyMrkleTreeKeccak224, PyMrkleTreeKeccak256,
-        PyMrkleTreeKeccak384, PyMrkleTreeKeccak512, PyMrkleTreeSha1, PyMrkleTreeSha224,
-        PyMrkleTreeSha256, PyMrkleTreeSha384, PyMrkleTreeSha512,
+        PyMrkleNode_Blake2b, PyMrkleNode_Blake2s, PyMrkleNode_Keccak224, PyMrkleNode_Keccak256,
+        PyMrkleNode_Keccak384, PyMrkleNode_Keccak512, PyMrkleNode_Sha1, PyMrkleNode_Sha224,
+        PyMrkleNode_Sha256, PyMrkleNode_Sha384, PyMrkleNode_Sha512, PyMrkleTreeBlake2b,
+        PyMrkleTreeBlake2s, PyMrkleTreeKeccak224, PyMrkleTreeKeccak256, PyMrkleTreeKeccak384,
+        PyMrkleTreeKeccak512, PyMrkleTreeSha1, PyMrkleTreeSha224, PyMrkleTreeSha256,
+        PyMrkleTreeSha384, PyMrkleTreeSha512,
     },
 };
 
 macro_rules! py_mrkle_proof {
-    ($name:ident, $digest:ty, $tree:ty, $classname:literal) => {
+    ($name:ident, $digest:ty, $tree:ty, $node:ty, $classname:literal) => {
         #[pyclass]
         #[derive(Clone)]
         #[pyo3(name = $classname)]
@@ -43,14 +46,16 @@ macro_rules! py_mrkle_proof {
                 root: NodeIndex<usize>,
                 leaf: NodeIndex<usize>,
             ) -> Result<ProofPath<$digest>, ProofError> {
-                let leaf_idx = leaf;
-
                 if leaf > tree.len() {
                     return Err(ProofError::InvalidSize);
                 }
 
+                if !tree.get(leaf.index()).unwrap().is_leaf() {
+                    return Err(ProofError::UnexpectedInternalNode);
+                }
+
                 let mut path = Vec::new();
-                let mut current_idx = leaf_idx;
+                let mut current_idx = leaf;
 
                 // Walk up from leaf to root
                 while let Some(node) = tree.get(current_idx.index()) {
@@ -107,15 +112,10 @@ macro_rules! py_mrkle_proof {
                 self.inner.expected_root().as_slice()
             }
 
-            #[inline]
-            fn path_count(&self) -> usize {
-                self.inner.paths().len()
-            }
-
             #[classmethod]
             fn generate(
-                _cls: &Bound<'_, PyType>,
-                tree: &Bound<'_, PyAny>,
+                _cls: &PyBound<'_, PyType>,
+                tree: &PyBound<'_, PyAny>,
                 leaves: Vec<isize>,
             ) -> PyResult<Self> {
                 Python::attach(|py| {
@@ -140,8 +140,7 @@ macro_rules! py_mrkle_proof {
                     let internal_tree = inner_attr.extract::<$tree>()?;
 
                     // Get tree information
-                    let leaf_indices = internal_tree.leaf_indices();
-                    let tree_len = leaf_indices.len() as isize;
+                    let tree_len = internal_tree.len() as isize;
                     let root = internal_tree
                         .inner
                         .start()
@@ -189,93 +188,82 @@ macro_rules! py_mrkle_proof {
             }
 
             fn verify(&self, leaves: PyBound<'_, PyAny>) -> PyResult<bool> {
-                // Handle single leaf as bytes
-                if let Ok(leaf) = leaves.extract::<&[u8]>() {
-                    if self.inner.paths().len() != 1 {
-                        return Err(PyValueError::new_err(format!(
-                            "Single leaf provided but proof expects {} leaves",
-                            self.inner.paths().len()
-                        )));
-                    }
-                    let result = self
-                        .inner
-                        .verify(vec![GenericArray::<$digest>::clone_from_slice(&leaf)])
-                        .map_err(|e| PyProofError::new_err(format!("{e}")))?;
-                    return Ok(result);
-                }
+                Python::attach(|py| {
+                    // Import the mrkle module and cache it
+                    let module = PyModule::import(py, "mrkle")?;
+                    MRKLE_MODULE.get_or_init_py_attached(py, || module.clone().unbind());
+                    let node_type = module.getattr("MrkleNode")?;
 
-                // Handle single leaf as hex string
-                if let Ok(hex_str) = leaves.extract::<String>() {
-                    if self.inner.paths().len() != 1 {
-                        return Err(PyValueError::new_err(format!(
-                            "Single leaf provided but proof expects {} leaves",
-                            self.inner.paths().len()
-                        )));
-                    }
+                    // Helper closure: decode hex string into bytes
+                    let decode_hex = |hex_str: &str| -> PyResult<Vec<u8>> {
+                        let mut buffer = vec![0; hex_str.len() / 2];
+                        faster_hex::hex_decode(hex_str.as_bytes(), &mut buffer)
+                            .map_err(|e| PyValueError::new_err(e.to_string()))?;
+                        Ok(buffer)
+                    };
 
-                    let mut buffer = vec![0; hex_str.len() / 2];
-                    faster_hex::hex_decode(hex_str.as_bytes(), &mut buffer)
-                        .map_err(|e| PyValueError::new_err(e.to_string()))?;
+                    // Convert leaves input into Vec<GenericArray<$digest>>
+                    let leaves_vec: PyResult<Vec<GenericArray<$digest>>> = (|| {
+                        if leaves.is_instance(&node_type)? {
+                            // Single MrkleNode
+                            let inner = leaves.getattr("_inner")?.extract::<$node>()?;
+                            Ok(vec![GenericArray::<$digest>::clone_from_slice(
+                                &inner.digest(),
+                            )])
+                        } else if let Ok(bytes) = leaves.extract::<&[u8]>() {
+                            // Single bytes
+                            Ok(vec![GenericArray::<$digest>::clone_from_slice(bytes)])
+                        } else if let Ok(hex_str) = leaves.extract::<String>() {
+                            // Single hex string
+                            Ok(vec![GenericArray::<$digest>::clone_from_slice(
+                                &decode_hex(&hex_str)?,
+                            )])
+                        } else if let Ok(vec_bytes) = leaves.extract::<Vec<Vec<u8>>>() {
+                            // Multiple bytes
+                            Ok(vec_bytes
+                                .iter()
+                                .map(|v| GenericArray::<$digest>::clone_from_slice(v))
+                                .collect())
+                        } else if let Ok(vec_hex) = leaves.extract::<Vec<String>>() {
+                            // Multiple hex strings
+                            let decoded: PyResult<Vec<GenericArray<$digest>>> = vec_hex
+                                .iter()
+                                .map(|s| {
+                                    decode_hex(s).map(|bytes| {
+                                        GenericArray::<$digest>::clone_from_slice(&bytes)
+                                    })
+                                })
+                                .collect();
+                            decoded
+                        } else if let Ok(seq) = leaves.downcast::<PySequence>() {
+                            // Generic sequence of MrkleNodes
+                            let mut result = Vec::with_capacity(seq.len()?);
+                            for item in seq.try_iter()? {
+                                let item = item?;
+                                if item.is_instance(&node_type)? {
+                                    let inner = item.getattr("_inner")?.extract::<$node>()?;
+                                    result.push(GenericArray::<$digest>::clone_from_slice(
+                                        &inner.digest(),
+                                    ));
+                                } else {
+                                    return Err(PyValueError::new_err(
+                                        "Sequence contains non-MrkleNode item",
+                                    ));
+                                }
+                            }
+                            Ok(result)
+                        } else {
+                            Err(PyTypeError::new_err(
+                                "Expected bytes, hex string, MrkleNode, or a sequence thereof",
+                            ))
+                        }
+                    })();
 
-                    let result = self
-                        .inner
-                        .verify(vec![GenericArray::<$digest>::clone_from_slice(
-                            buffer.as_slice(),
-                        )])
-                        .map_err(|e| PyProofError::new_err(format!("{e}")))?;
-                    return Ok(result);
-                }
-
-                // Handle multiple leaves as Vec<Vec<u8>>
-                if let Ok(multi) = leaves.extract::<Vec<Vec<u8>>>() {
-                    if multi.len() != self.inner.paths().len() {
-                        return Err(PyValueError::new_err(format!(
-                            "Expected {} leaves but got {}",
-                            self.inner.paths().len(),
-                            multi.len()
-                        )));
-                    }
-                    let leaf_refs: Vec<GenericArray<$digest>> = multi
-                        .iter()
-                        .map(|v| GenericArray::<$digest>::clone_from_slice(v))
-                        .collect();
-                    let result = self
-                        .inner
-                        .verify(leaf_refs)
-                        .map_err(|e| PyProofError::new_err(format!("{e}")))?;
-                    return Ok(result);
-                }
-
-                // Handle multiple leaves as Vec<String> (hex)
-                if let Ok(multi_hex) = leaves.extract::<Vec<String>>() {
-                    if multi_hex.len() != self.inner.paths().len() {
-                        return Err(PyValueError::new_err(format!(
-                            "Expected {} leaves but got {}",
-                            self.inner.paths().len(),
-                            multi_hex.len()
-                        )));
-                    }
-                    let decoded: PyResult<Vec<GenericArray<$digest>>> = multi_hex
-                        .iter()
-                        .map(|node| {
-                            let mut buffer = vec![0; node.len() / 2];
-                            faster_hex::hex_decode(node.as_bytes(), &mut buffer)
-                                .map_err(|e| PyValueError::new_err(e.to_string()))?;
-
-                            Ok(GenericArray::<$digest>::clone_from_slice(buffer.as_slice()))
-                        })
-                        .collect();
-
-                    let result = self
-                        .inner
-                        .verify(decoded?)
-                        .map_err(|e| PyProofError::new_err(format!("{e}")))?;
-                    return Ok(result);
-                }
-
-                Err(PyErr::new::<pyo3::exceptions::PyTypeError, _>(
-                    "Expected bytes, hex string, list[bytes], or list[str] of hex strings",
-                ))
+                    // Verify using inner tree
+                    self.inner
+                        .verify(leaves_vec?)
+                        .map_err(|e| PyProofError::new_err(format!("{e}")))
+                })
             }
 
             #[inline]
@@ -321,6 +309,7 @@ py_mrkle_proof!(
     PyMrkleProofSha1,
     PySha1Wrapper,
     PyMrkleTreeSha1,
+    PyMrkleNode_Sha1,
     "MrkleProofSha1"
 );
 
@@ -328,6 +317,7 @@ py_mrkle_proof!(
     PyMrkleProofSha224,
     PySha224Wrapper,
     PyMrkleTreeSha224,
+    PyMrkleNode_Sha224,
     "MrkleProofSha224"
 );
 
@@ -335,6 +325,7 @@ py_mrkle_proof!(
     PyMrkleProofSha256,
     PySha256Wrapper,
     PyMrkleTreeSha256,
+    PyMrkleNode_Sha256,
     "MrkleProofSha256"
 );
 
@@ -342,6 +333,7 @@ py_mrkle_proof!(
     PyMrkleProofSha384,
     PySha384Wrapper,
     PyMrkleTreeSha384,
+    PyMrkleNode_Sha384,
     "MrkleProofSha384"
 );
 
@@ -349,6 +341,7 @@ py_mrkle_proof!(
     PyMrkleProofSha512,
     PySha512Wrapper,
     PyMrkleTreeSha512,
+    PyMrkleNode_Sha512,
     "MrkleProofSha512"
 );
 
@@ -356,6 +349,7 @@ py_mrkle_proof!(
     PyMrkleProofBlake2b,
     PyBlake2b512Wrapper,
     PyMrkleTreeBlake2b,
+    PyMrkleNode_Blake2b,
     "MrkleProofBlake2b"
 );
 
@@ -363,6 +357,7 @@ py_mrkle_proof!(
     PyMrkleProofBlake2s,
     PyBlake2s256Wrapper,
     PyMrkleTreeBlake2s,
+    PyMrkleNode_Blake2s,
     "MrkleProofBlake2s"
 );
 
@@ -370,6 +365,7 @@ py_mrkle_proof!(
     PyMrkleProofKeccak224,
     PyKeccak224Wrapper,
     PyMrkleTreeKeccak224,
+    PyMrkleNode_Keccak224,
     "MrkleProofKeccak224"
 );
 
@@ -377,6 +373,7 @@ py_mrkle_proof!(
     PyMrkleProofKeccak256,
     PyKeccak256Wrapper,
     PyMrkleTreeKeccak256,
+    PyMrkleNode_Keccak256,
     "MrkleProofKeccak256"
 );
 
@@ -384,6 +381,7 @@ py_mrkle_proof!(
     PyMrkleProofKeccak384,
     PyKeccak384Wrapper,
     PyMrkleTreeKeccak384,
+    PyMrkleNode_Keccak384,
     "MrkleProofKeccak384"
 );
 
@@ -391,6 +389,7 @@ py_mrkle_proof!(
     PyMrkleProofKeccak512,
     PyKeccak512Wrapper,
     PyMrkleTreeKeccak512,
+    PyMrkleNode_Keccak512,
     "MrkleProofKeccak512"
 );
 
@@ -405,7 +404,7 @@ py_mrkle_proof!(
 /// # Returns
 /// * `PyResult<()>` - Success or error during registration
 #[pymodule]
-pub(crate) fn register_proof(m: &Bound<'_, PyModule>) -> PyResult<()> {
+pub(crate) fn register_proof(m: &PyBound<'_, PyModule>) -> PyResult<()> {
     let proof_m = PyModule::new(m.py(), "proof")?;
 
     proof_m.add_class::<PyMrkleProofSha1>()?;

@@ -125,18 +125,18 @@ macro_rules! py_mrkle_node {
         #[pymethods]
         impl $name {
             #[staticmethod]
-            fn dtype() -> $digest {
+            pub fn dtype() -> $digest {
                 <$digest>::new()
             }
 
             #[pyo3(name = "parent")]
-            fn parent_index(&self) -> PyResult<Option<usize>> {
+            pub fn parent_index(&self) -> PyResult<Option<usize>> {
                 Ok(self.inner.parent().map(|parent| parent.index()))
             }
 
             #[inline]
             #[pyo3(name = "children")]
-            fn children_indices(&self) -> PyResult<Vec<usize>> {
+            pub fn children_indices(&self) -> PyResult<Vec<usize>> {
                 Ok(self
                     .inner
                     .children()
@@ -145,17 +145,17 @@ macro_rules! py_mrkle_node {
                     .collect())
             }
 
-            fn value(&self) -> Option<&[u8]> {
+            pub fn value(&self) -> Option<&[u8]> {
                 self.inner.value().map(|value| value.as_ref())
             }
 
             #[inline]
-            fn digest(&self) -> &[u8] {
+            pub fn digest(&self) -> &[u8] {
                 self.inner.hash()
             }
 
             #[inline]
-            fn hexdigest(&self) -> String {
+            pub fn hexdigest(&self) -> String {
                 faster_hex::hex_string(self.inner.hash())
             }
 
@@ -183,7 +183,7 @@ macro_rules! py_mrkle_node {
             }
 
             #[inline]
-            fn is_leaf(&self) -> bool {
+            pub fn is_leaf(&self) -> bool {
                 self.inner.is_leaf()
             }
 

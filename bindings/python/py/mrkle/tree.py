@@ -751,6 +751,7 @@ class MrkleProof:
             >>> proof = MrkleProof.generate(tree, node)
 
         """
+
         name = tree.dtype().name()
 
         if proof := PROOF_MAP.get(name):
@@ -758,6 +759,15 @@ class MrkleProof:
                 leaves = [leaves]
             elif isinstance(leaves, MrkleNode):
                 leaves = [_find_index_from_node(tree, leaves)]
+            elif isinstance(leaves, Sequence):
+                leaves = list(
+                    map(
+                        lambda node: _find_index_from_node(tree, node)
+                        if isinstance(node, MrkleNode)
+                        else node,
+                        leaves,
+                    )
+                )
 
             return cls(proof.generate(tree, leaves))
         else:
@@ -765,7 +775,17 @@ class MrkleProof:
                 f"{name!r} is not a digest algorithm supported by MrkleTree."
             )
 
-    def verify(self, leaves: Union[Sequence[str], Sequence[bytes]]) -> bool:
+    def verify(
+        self,
+        leaves: Union[
+            Sequence[str],
+            Sequence[bytes],
+            Sequence[MrkleNode],
+            str,
+            bytes,
+            MrkleNode,
+        ],
+    ) -> bool:
         """Verify if the expected digest belongs to the tree.
 
         Returns:
@@ -783,9 +803,11 @@ class MrkleProof:
             >>> leaf = tree[0]
             >>> proof.verify(leaf.digest())
             True
+            >>> leaf = tree[0]
+            >>> proof.verify(leaf)
+            True
 
         """
-
         return self._inner.verify(leaves=leaves)
 
     def dtype(self) -> Digest:
