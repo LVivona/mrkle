@@ -9,7 +9,7 @@ members = [
 version = "0.0.1-rc-0"
 edition = "2024"
 license = "MIT OR Apache-2.0"
-homepage = "mrkle.org"
+homepage = "https://mrkle.org"
 repository = "https://github.com/LVivona/mrkle"
 keywords = ["hash", "merkle", "proof", "tree"]
 
