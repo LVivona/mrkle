@@ -77,7 +77,7 @@ pub enum TreeError {
     /// An invalid operation was attempted on the tree or builder.
     ///
     /// This error provides context about what operation failed and why.
-    #[error("Invalid operation '{operation}': {reason}")]
+    #[error("Invalid operation '{operation}': {reason}.")]
     InvalidOperation {
         /// The name of the operation that failed.
         operation: &'static str,
@@ -89,7 +89,7 @@ pub enum TreeError {
     ///
     /// This error indicates that the tree's internal state has become
     /// inconsistent, possibly due to concurrent modification or corruption.
-    #[error("Tree is in an inconsistent state: {details}")]
+    #[error("Tree is in an inconsistent state: {details}.")]
     InconsistentState {
         /// Details about the inconsistency.
         details: String,
@@ -99,7 +99,7 @@ pub enum TreeError {
     ///
     /// This error aggregates multiple validation failures that occurred
     /// during tree validation operations.
-    #[error("Validation failed with {count} error(s): {summary}")]
+    #[error("Validation failed with {count} error(s): {summary}.")]
     ValidationFailed {
         /// The number of validation errors.
         count: usize,
@@ -130,13 +130,17 @@ pub enum ProofError {
     InvalidSize,
 
     /// Number of expected leaf hashes not met to finish proof.
-    #[error("Expected {expected} hashes, and got only {len}")]
+    #[error("Expected {expected} hashes, and got only {len}.")]
     IncompleteProof {
         /// lengths of leaves to verify.
         len: usize,
         /// expected leaves to verify.
         expected: usize,
     },
+
+    /// Invalid path cannot start with an internal node.
+    #[error("Invalid path, cannot start with an internal node.")]
+    UnexpectedInternalNode,
 
     /// The computed root hash does not match the expected root hash.
     ///
@@ -151,7 +155,7 @@ pub enum ProofError {
     },
 
     /// The path from the node does not meet the root.
-    #[error("Expected root index {0}, got {1}")]
+    #[error("Expected root index {0}, got {1}.")]
     PathRootMismatch(usize, usize),
 
     /// An error occurred while constructing or manipulating a [`Tree`](crate::tree::Tree).

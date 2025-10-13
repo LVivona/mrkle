@@ -219,6 +219,7 @@ impl<D: Digest> ProofPath<D> {
     /// * [`ProofError::InvalidSize`] — If the leaf index is out of range.
     /// * [`ProofError::PathRootMismatch`] — If traversal ends at a node
     ///   that does not correspond to the specified root.
+    /// * [`UnexpectedInternalNode`] — Leaf index points to a non leaf node.
     pub(crate) fn generate<T, Ix: IndexType>(
         tree: &MrkleTree<T, D, Ix>,
         root: NodeIndex<Ix>,
@@ -228,9 +229,18 @@ impl<D: Digest> ProofPath<D> {
             return Err(ProofError::InvalidSize);
         }
 
+        // NOTE: We can only handle leaves.
+        if !tree.get(leaf.index()).unwrap().is_leaf() {
+            return Err(ProofError::UnexpectedInternalNode);
+        }
+
         let mut path = Vec::new();
         let mut current_idx = leaf;
 
+        // NOTE: Loop up branch, gathering all siblings required to calculate the root hash
+        // If the root index not equal the current_index we must assume
+        // that the root is not within the branch and must through an error
+        // given the false pretense.
         while let Some(node) = tree.get(current_idx.index()) {
             if current_idx == root {
                 break;
