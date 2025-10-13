@@ -22,10 +22,10 @@ jobs:
           toolchain: stable
 
       - name: Dry Run Publish package rust
-        working-directory: ./bintensors
+        working-directory: ./mrkle
         run: cargo publish --dry-run
 
       - name: Publish package rust
         if: ${{ !contains(github.ref, 'rc') }}
-        working-directory: ./bintensors
+        working-directory: ./mrkle
         run: cargo publish --token ${CRATES_TOKEN}
