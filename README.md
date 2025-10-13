@@ -4,8 +4,14 @@
   </picture>
 </p>
 <p align="center">
-  <a href="https://github.com/LVivona/mrkle/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License"></a>
+  <a href="https://github.com/LVivona/mrkle/blob/main/LICENSE-APACHE.md"><img src="https://img.shields.io/badge/license-APACHE-2.0-blue.svg" alt="License"></a>
+  <a href="https://github.com/LVivona/mrkle/blob/main/LICENSE-MIT.md"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License"></a>
+  <a href="https://crates.io/crates/mrkle"><img alt="Crates.io Version" src="https://img.shields.io/crates/v/mrkle"></a>
+  <a href="https://docs.rs/mrkle"><img alt="docs.rs" src="https://img.shields.io/badge/rust-docs.rs-lightgray?logo=rust&logoColor=orange"></a>
+  <a href="https://pypi.org/project/mrkle/"><img alt="PyPI" src="https://img.shields.io/pypi/v/mrkle"></a>
+  <a href="https://pypi.org/project/mrkle/"><img alt="Python Version" src="https://img.shields.io/pypi/pyversions/mrkle?logo=python"></a>
 </p>
+
 
 A fast and flexible Merkle Tree library for Rust, providing efficient construction of Merkle Trees, verification of Merkle Proofs for single and multiple elements, and generic support for any hashable data type.
 
@@ -38,7 +44,7 @@ def namespaced_state_dict(model: torch.nn.Module) -> dict[str, torch.Tensor]:
     Returns a state_dict with the model name prefixed to every key.
     """
     sd = model.state_dict()
-    return {f"{model.__class__.__name__.lower()}.{k}": v.detach().cpu().numpy().tobytes() for k, v in sd.items()}
+    return {f"{model.__class__.__name__.lower()}.{k}": v.detach().cpu().numpy() for k, v in sd.items()}
 
 class ToyModel(torch.nn.Module):
     def __init__(self, in_feature: int, out_feature: int):

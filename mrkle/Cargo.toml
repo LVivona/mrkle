@@ -1,9 +1,11 @@
 [package]
 name = "mrkle"
 edition = "2024"
-description = "A simple and performant Merkle Tree implementation in Rust, with support for building trees and verifying inclusion proofs."
+description = """A fast and flexible Merkle Tree library."""
 readme = "README.md"
 repository = "https://github.com/LVivona/mrkle"
+publish = true
+version = { workspace = true }
 keywords = { workspace = true }
 homepage = { workspace = true }
 license = { workspace = true }
