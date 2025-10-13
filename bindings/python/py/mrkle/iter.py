@@ -48,9 +48,6 @@ class MrkleTreeIter(Iterator[MrkleNode]):
         Returns:
             MrkleTreeIter: New iterator instance.
 
-        Raises:
-            AssertionError: If the digest algorithm of `_tree` does not match `_dtype`.
-
         Example:
             >>> from mrkle.tree import MrkleTree
             >>> tree = MrkleTree.from_leaves([b"data1", b"data2"], name="sha256")

@@ -126,7 +126,7 @@ macro_rules! py_mrkle_proof {
                     let ttype = module.getattr(intern!(py, "MrkleTree"))?;
 
                     if !tree.is_instance(&ttype)? {
-                        return Err(PyValueError::new_err("Expected a MrkleTree instance"));
+                        return Err(PyTypeError::new_err("Expected a MrkleTree instance"));
                     }
 
                     if leaves.is_empty() {

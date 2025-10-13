@@ -38,8 +38,8 @@ class MrkleTree:
 
     This class provides an immutable Python interface for Merkle trees
     with a specific digest algorithm. Users should not instantiate trees
-    directly; instead, use the `from_leaves` class method to construct a tree
-    from leaf data with the appropriate digest.
+    directly; instead, use the `from_leaves` or `from_dict` class method
+    to construct a tree from leaf data with the appropriate digest.
 
     Attributes:
         _inner (Tree_T): The underlying Rust-based Merkle tree instance.
@@ -185,8 +185,7 @@ class MrkleTree:
 
         Raises:
             ValueError: If the digest algorithm name is not supported.
-            AssertionError: If the tree's digest type doesn't match the
-                provided digest type.
+            TypeError: If data is of an unsupported type.
 
         Examples:
             >>> from mrkle.tree import MrkleTree
@@ -222,6 +221,10 @@ class MrkleTree:
             MrkleBranch: An iterator that yields nodes from the specified node
                 up to the root.
 
+        Raises:
+            TreeError: If node not found in its parent's children
+            or has not parent.
+
         Examples:
             >>> tree = MrkleTree.from_leaves([b"a", b"b", b"c"])
             >>> branch = tree.branch(0)  # From first leaf
@@ -252,11 +255,19 @@ class MrkleTree:
             MrkleProof: A Merkle proof object that can verify the
                 inclusion of the specified leaves in this tree.
 
+        Raises:
+            ValueError: If there are no proved leaves.
+            TreeError: If the tree has no root.
+            IndexError: If a node index is out of bounds.
+            ProofError: If the generated path is invalid.
+
         Examples:
             >>> tree = MrkleTree.from_leaves([b"a", b"b", b"c"])
             >>> proof = tree.generate_proof(0)
         """
         return MrkleProof.generate(self, leaves)
+
+    proof = generate_proof
 
     def to_string(self) -> str:
         """pretty print of MrkleTree.
@@ -493,8 +504,8 @@ class MrkleTree:
             MrkleTree: A new tree instance built from the given dictionary data.
 
         Raises:
-            ValueError: Raised when the specified digest algorithm is not
-                recognized in the default registry.
+            ValueError: Raised when the specified digest algorithm is not recognized
+                in the default registry, or when a tree traversal error occurs.
 
         Note:
             - Flatten format: defines the depth within the key using a separator
@@ -545,7 +556,6 @@ class MrkleTree:
             MrkleTree: A new tree instance wrapping the given components.
 
         """
-
         obj = object.__new__(cls)
         object.__setattr__(obj, "_inner", tree)
         return obj
