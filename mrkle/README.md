@@ -4,7 +4,7 @@
   </picture>
 </p>
 <p align="center">
-  <a href="https://github.com/LVivona/mrkle/blob/main/LICENSE-APACHE.md"><img src="https://img.shields.io/badge/license-APACHE_2.0-blue.svg" alt="License"></a>
+  <a href="https://github.com/LVivona/mrkle/blob/main/LICENSE-APACHE.md"><img src="https://img.shields.io/badge/license-Apache_2.0-blue.svg" alt="License"></a>
   <a href="https://github.com/LVivona/mrkle/blob/main/LICENSE-MIT.md"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License"></a>
   <a href="https://crates.io/crates/mrkle"><img alt="Crates.io Version" src="https://img.shields.io/crates/v/mrkle"></a>
   <a href="https://docs.rs/mrkle"><img alt="docs.rs" src="https://img.shields.io/badge/rust-docs.rs-lightgray?logo=rust&logoColor=orange"></a>
@@ -14,6 +14,42 @@
 
 
 A fast and flexible Merkle Tree library for Rust, providing efficient construction of Merkle Trees, verification of Merkle Proofs for single and multiple elements, and generic support for any hashable data type.
+
+### Installation
+
+### Cargo
+
+You can add mrkle to your cargo by using `cargo add`:
+
+```bash
+cargo add mrkle
+```
+
+### Pip
+
+You can install mrkle via the pip manager:
+
+```bash
+pip install mrkle
+#or
+pipx install mrkle
+```
+
+### From source
+
+For the sources, you need Rust
+
+```bash
+# Install Rust
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+# Make sure it's up to date and using stable channel
+rustup update
+git clone https://github.com/LVivona/mrkle
+cd mrkle/bindings/python
+pip install setuptools_rust maturin
+# install
+pip install -e .
+```
 
 ### What is a Merkle Tree?
 A Merkle Tree is a tree data structure. where it contains a set of properties such as:
@@ -89,3 +125,16 @@ let tree = MrkleTree::<&[u8], Sha256>::from(chunks);
 // Get the Merkle root
 let root = tree.root();
 ```
+
+## Overview
+
+This project began as an exploration of its parent framework, focusing on how to validate and communicate deep neural network models efficiently across the web within a decentralized exchange. The motivation for this work, and its general concept, draws inspiration from early software piracy distribution systems and version control models such as Git, both of which use Merkle Trees to validate ordered structures (e.g., file systems, audio, and video data).
+
+Building on that idea, and unsatisfied with the constant writing to my hard disk of subsets of weights that remained unchanged from the previous epoch, I made the simple assumption that the same logic could be applied to deep neural network modules. Like file systems and other ordered data, these modules can be formulated as partially ordered sets. This ordering is unique to each model’s layout, and in this sense, the ordered set is bounded by the initialization defined within the module, consistent across multiple ML frameworks such as PyTorch, TensorFlow, and mlx.
+
+Although still in its early stages, this project aims to help standardize data structures within an open library, potentially providing a foundation that others may find valuable for their own work.
+
+
+### Licence
+
+Licensed under [MIT](https://github.com/LVivona/mrkle/blob/main/MIT-LICENCE.md); contributions licensed under [Apache 2.0](https://github.com/LVivona/mrkle/blob/main/LICENSE-APACHE.md).
