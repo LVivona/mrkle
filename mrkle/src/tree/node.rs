@@ -394,8 +394,9 @@ pub trait Node<Ix: IndexType = DefaultIx> {
     fn children(&self) -> Vec<NodeIndex<Ix>>;
 }
 
+/// Default implmentation of [`Node<Ix>`] and [`MutNode<Ix>`].
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct DefaultNode<T, Ix: IndexType = DefaultIx> {
+pub struct DefaultNode<T, Ix: IndexType = DefaultIx> {
     /// Internal value should be
     pub(crate) value: T,
     /// Each Node should contain a possible index to its parent.
@@ -418,7 +419,8 @@ where
 }
 
 impl<T, Ix: IndexType> DefaultNode<T, Ix> {
-    pub(crate) fn new(value: T) -> Self {
+    /// Construct new [`DefaultNode<T, Ix>`] with value.
+    pub fn new(value: T) -> Self {
         Self {
             value,
             parent: None,
@@ -426,11 +428,22 @@ impl<T, Ix: IndexType> DefaultNode<T, Ix> {
         }
     }
 
-    fn value_mut(&mut self) -> &mut T {
+    /// Construct new [`DefaultNode<T, Ix>`] with value, and non empty parent.
+    pub fn new_with_parent_index(value: T, parent: NodeIndex<Ix>) -> Self {
+        Self {
+            value,
+            parent: Some(parent),
+            children: Vec::new(),
+        }
+    }
+
+    /// Return a mutable access to internal value.
+    pub fn value_mut(&mut self) -> &mut T {
         &mut self.value
     }
 
-    fn value(&self) -> &T {
+    /// Return unmutable access to internal value
+    pub fn value(&self) -> &T {
         &self.value
     }
 }
