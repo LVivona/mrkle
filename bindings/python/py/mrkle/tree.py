@@ -562,13 +562,16 @@ class MrkleTree:
         return obj
 
     @overload
-    def __getitem__(self, key: int) -> MrkleNode: ...
+    def __getitem__(self, key: int) -> MrkleNode:
+        ...
 
     @overload
-    def __getitem__(self, key: slice) -> list[MrkleNode]: ...
+    def __getitem__(self, key: slice) -> list[MrkleNode]:
+        ...
 
     @overload
-    def __getitem__(self, key: Sequence[int]) -> list[MrkleNode]: ...
+    def __getitem__(self, key: Sequence[int]) -> list[MrkleNode]:
+        ...
 
     def __getitem__(
         self, key: Union[int, slice, Sequence[int]]
