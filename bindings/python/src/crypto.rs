@@ -54,6 +54,12 @@ macro_rules! py_digest {
             }
         }
 
+        impl Default for $name {
+            fn default() -> Self {
+                Self::new()
+            }
+        }
+
         impl PyDigest for $name {
             type Inner = $digest;
 

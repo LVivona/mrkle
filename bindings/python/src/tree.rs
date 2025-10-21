@@ -118,7 +118,7 @@ macro_rules! py_mrkle_node {
                 tree: &Tree<$name, usize>,
                 children: Vec<NodeIndex<usize>>,
             ) -> Result<Self, NodeError> {
-                Ok(<$name>::internal(tree, children)?)
+                <$name>::internal(tree, children)
             }
         }
 
@@ -611,7 +611,7 @@ macro_rules! py_mrkle_tree {
                 let buf = JsonCodec::<&[u8], $digest>::new(
                     self.inner
                         .start()
-                        .and_then(|root| self.from_node(root, &mut HashMap::new()))
+                        .and_then(|root| self.visit_node(root, &mut HashMap::new()))
                         .ok_or_else(|| SerdeError::new_err("JSON could not be serialized."))?,
                 );
 
@@ -700,7 +700,7 @@ macro_rules! py_mrkle_tree {
                 let json_codec = if let Ok(bytes) = data.extract::<&[u8]>() {
                     JsonCodec::<Box<[u8]>, $digest>::from_slice(bytes)
                 } else if let Ok(string) = data.extract::<String>() {
-                    JsonCodec::<Box<[u8]>, $digest>::from_str(string.as_str())
+                    JsonCodec::<Box<[u8]>, $digest>::from_str_utf8(string.as_str())
                 } else {
                     return Err(PyTypeError::new_err(
                         "Expected bytes or string for JSON deserialization",
@@ -853,8 +853,8 @@ macro_rules! py_mrkle_tree {
                 self.inner.iter()
             }
 
-            fn build_tree_from_json<'py>(
-                py: Python<'py>,
+            fn build_tree_from_json(
+                py: Python<'_>,
                 node: MerkleTreeJson<Box<[u8]>>,
                 tree: &mut Tree<$node, usize>,
             ) -> PyResult<NodeIndex<usize>> {
@@ -897,7 +897,7 @@ macro_rules! py_mrkle_tree {
                 <$node>::internal(tree, children).map_err(|e| PyNodeError::new_err(format!("{e}")))
             }
 
-            fn from_node(
+            fn visit_node(
                 &self,
                 index: NodeIndex<usize>,
                 visited: &mut HashMap<usize, ()>,
@@ -920,7 +920,7 @@ macro_rules! py_mrkle_tree {
                     // Parent node
                     let children: Vec<_> = children_indices
                         .iter()
-                        .filter_map(|&child_idx| self.from_node(child_idx, visited))
+                        .filter_map(|&child_idx| self.visit_node(child_idx, visited))
                         .collect();
 
                     Some(MerkleTreeJson::Parent { hash, children })
@@ -1046,7 +1046,7 @@ fn traverse_dict_depth<N: PyMrkleNode<D, usize>, D: Digest>(
         tree.set_root(Some(root));
         Ok(())
     } else {
-        Err(PyValueError::new_err(format!(
+        Err(PyValueError::new_err(String::from(
             "Invalid value type for expected dict or bytes",
         )))
     }
@@ -1076,13 +1076,13 @@ fn process_traversal<N: PyMrkleNode<D, usize>, D: Digest>(
         return Ok(node_id);
     }
 
-    if let Ok(child) = extract_to_bytes(&value) {
+    if let Ok(child) = extract_to_bytes(value) {
         let leaf = N::leaf(child);
         let index = tree.push(leaf);
         return Ok(index);
     }
 
-    Err(PyValueError::new_err(format!(
+    Err(PyValueError::new_err(String::from(
         "Invalid value type for: expected dict or bytes",
     )))
 }

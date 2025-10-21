@@ -23,9 +23,9 @@ impl<'py> FromPyObject<'py> for PyCodecFormat {
                 )),
             }
         } else {
-            return Err(PyValueError::new_err(
+            Err(PyValueError::new_err(
                 "Unable to convert into proper encoding.",
-            ));
+            ))
         }
     }
 }
@@ -76,7 +76,7 @@ where
         serde_json::from_slice(data)
     }
 
-    pub fn from_str(data: &'de str) -> Result<Self, serde_json::Error> {
+    pub fn from_str_utf8(data: &'de str) -> Result<Self, serde_json::Error> {
         serde_json::from_str(data)
     }
 
@@ -122,7 +122,7 @@ mod hex_serde {
     where
         S: Serializer,
     {
-        serializer.serialize_str(faster_hex::hex_string(&bytes).as_str())
+        serializer.serialize_str(faster_hex::hex_string(bytes).as_str())
     }
 
     pub fn deserialize<'de, D>(deserializer: D) -> Result<Vec<u8>, D::Error>
