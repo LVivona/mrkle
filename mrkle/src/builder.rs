@@ -1,7 +1,9 @@
 #![allow(dead_code)]
 use crate::{
-    DefaultIx, GenericArray, Hasher, IndexType, MrkleHasher, MrkleNode, MrkleTree, Node, NodeError,
-    NodeIndex, Tree, TreeError, error::MrkleError, prelude::*,
+    DefaultIx, GenericArray, Hasher, IndexType, MrkleHasher, MrkleNode, MrkleTree, Node, NodeIndex,
+    Tree,
+    error::{MrkleError, NodeError, TreeBuilderError, TreeError},
+    prelude::*,
 };
 
 /// A builder for constructing Merkle trees with default configuration.
@@ -240,11 +242,14 @@ impl<T, D: Digest, Ix: IndexType> MrkleDefaultBuilder<T, D, Ix> {
     /// # Ok(())
     /// # }
     /// ```
-    pub fn insert_leaf(&mut self, leaf: MrkleNode<T, D, Ix>) -> Result<NodeIndex<Ix>, TreeError> {
+    pub fn insert_leaf(
+        &mut self,
+        leaf: MrkleNode<T, D, Ix>,
+    ) -> Result<NodeIndex<Ix>, TreeBuilderError> {
         self.check_not_finalized()?;
 
         if !leaf.is_leaf() {
-            return Err(TreeError::InvalidOperation {
+            return Err(TreeBuilderError::InvalidOperation {
                 operation: "insert_leaf",
                 reason: "provided node is not a leaf node".to_string(),
             });
@@ -269,8 +274,8 @@ impl<T, D: Digest, Ix: IndexType> MrkleDefaultBuilder<T, D, Ix> {
     ///
     /// # Errors
     ///
-    /// * [`TreeError::AlreadyFinalized`] - If the builder has been finalized
-    /// * [`TreeError::InvalidOperation`] - If children vector is empty
+    /// * [`TreeBulderError::AlreadyFinalized`] - If the builder has been finalized
+    /// * [`TreeBulderError::InvalidOperation`] - If children vector is empty
     /// * [`TreeError::IndexOutOfBounds`] - If any child index is invalid
     /// * [`TreeError::ParentConflict`] - If any child already has a parent
     ///
@@ -294,7 +299,7 @@ impl<T, D: Digest, Ix: IndexType> MrkleDefaultBuilder<T, D, Ix> {
         self.check_not_finalized()?;
 
         if children.is_empty() {
-            return Err(MrkleError::from(TreeError::InvalidOperation {
+            return Err(MrkleError::from(TreeBuilderError::InvalidOperation {
                 operation: "insert_internal",
                 reason: "internal nodes must have at least one child".to_string(),
             }));
@@ -327,9 +332,9 @@ impl<T, D: Digest, Ix: IndexType> MrkleDefaultBuilder<T, D, Ix> {
     ///
     /// # Errors
     ///
-    /// * [`TreeError::AlreadyFinalized`] - If the builder has already been finalized
+    /// * [`TreeBulderError::AlreadyFinalized`] - If the builder has already been finalized
+    /// * [`TreeBulderError::InvalidOperation`] - If the root node has a parent
     /// * [`TreeError::IndexOutOfBounds`] - If the root index is invalid
-    /// * [`TreeError::InvalidOperation`] - If the root node has a parent
     ///
     /// # Examples
     ///
@@ -345,7 +350,7 @@ impl<T, D: Digest, Ix: IndexType> MrkleDefaultBuilder<T, D, Ix> {
     /// # Ok(())
     /// # }
     /// ```
-    pub fn finish(mut self, root: NodeIndex<Ix>) -> Result<MrkleTree<T, D, Ix>, MrkleError> {
+    pub fn finish(mut self, root: NodeIndex<Ix>) -> Result<MrkleTree<T, D, Ix>, TreeBuilderError> {
         self.check_not_finalized()?;
 
         // Validate the root node
@@ -356,11 +361,11 @@ impl<T, D: Digest, Ix: IndexType> MrkleDefaultBuilder<T, D, Ix> {
 
         // Perform comprehensive tree validation
         if let Err(errors) = self.validate() {
-            return Err(MrkleError::from(TreeError::ValidationFailed {
+            return Err(TreeBuilderError::ValidationFailed {
                 count: errors.len(),
                 summary: "Tree structure validation failed".to_string(),
                 errors,
-            }));
+            });
         }
 
         self.finalized = true;
@@ -395,11 +400,11 @@ impl<T, D: Digest, Ix: IndexType> MrkleDefaultBuilder<T, D, Ix> {
     /// // Validate before finishing
     /// builder.finish(root).unwrap();
     /// ```
-    fn validate(&self) -> Result<(), Vec<TreeError>> {
+    fn validate(&self) -> Result<(), Vec<TreeBuilderError>> {
         let mut errors = Vec::new();
 
         if self.tree.try_root().is_err() {
-            errors.push(TreeError::MissingRoot);
+            errors.push(TreeError::MissingRoot.into());
         }
 
         let mut visited = BTreeSet::new();
@@ -413,7 +418,7 @@ impl<T, D: Digest, Ix: IndexType> MrkleDefaultBuilder<T, D, Ix> {
                     Some(parent_node) => {
                         // Verify bidirectional relationship
                         if !parent_node.children().contains(&index) {
-                            errors.push(TreeError::InconsistentState {
+                            errors.push(TreeBuilderError::InconsistentState {
                                 details: format!(
                                     "node {} claims parent {}, but parent doesn't list it as child",
                                     index,
@@ -423,10 +428,13 @@ impl<T, D: Digest, Ix: IndexType> MrkleDefaultBuilder<T, D, Ix> {
                         }
                     }
                     None => {
-                        errors.push(TreeError::IndexOutOfBounds {
-                            index: parent_idx.index(),
-                            len: self.tree.len(),
-                        });
+                        errors.push(
+                            TreeError::IndexOutOfBounds {
+                                index: parent_idx.index(),
+                                len: self.tree.len(),
+                            }
+                            .into(),
+                        );
                     }
                 }
             }
@@ -436,7 +444,7 @@ impl<T, D: Digest, Ix: IndexType> MrkleDefaultBuilder<T, D, Ix> {
                     Some(child_node) => {
                         // Verify bidirectional relationship
                         if child_node.parent() != Some(index) {
-                            errors.push(TreeError::InconsistentState {
+                            errors.push(TreeBuilderError::InconsistentState {
                                 details: format!(
                                     "node {} lists {} as child, but child has different parent",
                                     index,
@@ -446,10 +454,13 @@ impl<T, D: Digest, Ix: IndexType> MrkleDefaultBuilder<T, D, Ix> {
                         }
                     }
                     None => {
-                        errors.push(TreeError::IndexOutOfBounds {
-                            index: child_idx.index(),
-                            len: self.tree.len(),
-                        });
+                        errors.push(
+                            TreeError::IndexOutOfBounds {
+                                index: child_idx.index(),
+                                len: self.tree.len(),
+                            }
+                            .into(),
+                        );
                     }
                 }
             }
@@ -458,7 +469,7 @@ impl<T, D: Digest, Ix: IndexType> MrkleDefaultBuilder<T, D, Ix> {
         // Validate if all nodes have been visited in the tree.
         // if not then tree is disjoint.
         if visited.len() != self.len() {
-            errors.push(TreeError::DisjointNode);
+            errors.push(TreeError::DisjointNode.into());
         }
 
         if errors.is_empty() {
@@ -476,23 +487,23 @@ impl<T, D: Digest, Ix: IndexType> MrkleDefaultBuilder<T, D, Ix> {
     /// # Errors
     ///
     /// Returns [`TreeError::AlreadyFinalized`] if the builder has been finalized.
-    fn check_not_finalized(&self) -> Result<(), TreeError> {
+    fn check_not_finalized(&self) -> Result<(), TreeBuilderError> {
         if self.finalized {
-            Err(TreeError::AlreadyFinalized)
+            Err(TreeBuilderError::AlreadyFinalized)
         } else {
             Ok(())
         }
     }
 
     /// Validates that all provided child indices are valid and available for parenting.
-    fn validate_children(&self, children: &[NodeIndex<Ix>]) -> Result<(), TreeError> {
+    fn validate_children(&self, children: &[NodeIndex<Ix>]) -> Result<(), TreeBuilderError> {
         // Check for duplicates first.
         let mut seen = BTreeSet::new();
         for &child in children {
             if !seen.insert(child) {
-                return Err(NodeError::Duplicate {
+                return Err(TreeError::from(NodeError::Duplicate {
                     child: child.index(),
-                }
+                })
                 .into());
             }
         }
@@ -511,7 +522,8 @@ impl<T, D: Digest, Ix: IndexType> MrkleDefaultBuilder<T, D, Ix> {
                 return Err(TreeError::from(NodeError::ParentConflict {
                     parent: node.parent().unwrap().index(),
                     child: child.index(),
-                }));
+                })
+                .into());
             }
         }
         Ok(())
@@ -545,7 +557,7 @@ impl<T, D: Digest, Ix: IndexType> MrkleDefaultBuilder<T, D, Ix> {
     }
 
     /// Validates that a node is suitable to be used as a tree root.
-    fn validate_root(&self, root: NodeIndex<Ix>) -> Result<(), TreeError> {
+    fn validate_root(&self, root: NodeIndex<Ix>) -> Result<(), TreeBuilderError> {
         let root_node = self
             .tree
             .get(root.index())
@@ -555,7 +567,7 @@ impl<T, D: Digest, Ix: IndexType> MrkleDefaultBuilder<T, D, Ix> {
             })?;
 
         if !root_node.is_root() {
-            return Err(TreeError::InvalidOperation {
+            return Err(TreeBuilderError::InvalidOperation {
                 operation: "finish",
                 reason: "root node cannot have a parent".to_string(),
             });
@@ -598,7 +610,7 @@ where
     /// # Ok(())
     /// # }
     /// ```
-    pub fn insert_leaf_data(&mut self, data: T) -> Result<NodeIndex<Ix>, TreeError> {
+    pub fn insert_leaf_data(&mut self, data: T) -> Result<NodeIndex<Ix>, TreeBuilderError> {
         self.check_not_finalized()?;
         Ok(self.tree.push(MrkleNode::<T, D, Ix>::leaf(data)))
     }
@@ -634,7 +646,7 @@ where
     /// # Ok(())
     /// # }
     /// ```
-    pub fn insert_leaves<I>(&mut self, data_iter: I) -> Result<Vec<NodeIndex<Ix>>, TreeError>
+    pub fn insert_leaves<I>(&mut self, data_iter: I) -> Result<Vec<NodeIndex<Ix>>, TreeBuilderError>
     where
         T: Clone,
         I: IntoIterator<Item = T>,
@@ -688,7 +700,7 @@ where
         self.check_not_finalized()?;
 
         if leaves.is_empty() {
-            return Err(MrkleError::from(TreeError::InvalidOperation {
+            return Err(MrkleError::from(TreeBuilderError::InvalidOperation {
                 operation: "build_complete_tree_from_leaves",
                 reason: "cannot build tree from empty leaves vector".to_string(),
             }));
@@ -751,7 +763,7 @@ where
         let mut builder = Self::new();
         let leaves = builder.insert_leaves(data_iter)?;
         let root = builder.build_complete_tree_from_leaves(leaves)?;
-        builder.finish(root)
+        builder.finish(root).map_err(MrkleError::from)
     }
 }
 
@@ -771,7 +783,7 @@ impl<T: AsRef<[u8]>, D: Digest, Ix: IndexType> MrkleDefaultBuilder<T, D, Ix> {
     /// # Ok(())
     /// # }
     /// ```
-    pub fn with_leaf(mut self, leaf: MrkleNode<T, D, Ix>) -> Result<Self, TreeError> {
+    pub fn with_leaf(mut self, leaf: MrkleNode<T, D, Ix>) -> Result<Self, TreeBuilderError> {
         self.insert_leaf(leaf)?;
         Ok(self)
     }
@@ -790,7 +802,7 @@ impl<T: AsRef<[u8]>, D: Digest, Ix: IndexType> MrkleDefaultBuilder<T, D, Ix> {
     /// # Ok(())
     /// # }
     /// ```
-    pub fn with_leaf_data(mut self, data: T) -> Result<Self, TreeError>
+    pub fn with_leaf_data(mut self, data: T) -> Result<Self, TreeBuilderError>
     where
         T: Clone,
     {
@@ -835,7 +847,7 @@ impl<T: AsRef<[u8]>, D: Digest, Ix: IndexType> MrkleDefaultBuilder<T, D, Ix> {
             .collect();
 
         let root = self.build_complete_tree_from_leaves(leaves)?;
-        self.finish(root)
+        self.finish(root).map_err(MrkleError::from)
     }
 }
 

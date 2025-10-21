@@ -68,17 +68,24 @@ impl<D: Digest> MrkleProof<D> {
         tree: &MrkleTree<T, D, Ix>,
         leaves: &[NodeIndex<Ix>],
     ) -> Result<Self, ProofError> {
+        // Given no leaves the proof is not completeable to be generated.
         if leaves.is_empty() {
-            return Err(ProofError::InvalidSize);
+            return Err(ProofError::IncompleteProof {
+                expected: tree.leaf_indices().len(),
+                len: 0,
+            });
         }
 
+        // Tree contains no root.
         let root = tree
             .core
             .start()
             .ok_or(ProofError::from(TreeError::MissingRoot))?;
 
+        // Obtain the root hash.
         let expected_root = tree.root_hash().clone();
 
+        // were are generate a know cardinality of proofs.
         let mut paths = Vec::with_capacity(leaves.len());
         for &index in leaves {
             let path = ProofPath::<D>::generate(tree, root, index)?;
@@ -743,11 +750,7 @@ mod test {
         let leaf_indices = vec![0.into()];
 
         let multi_proof = MrkleProof::generate_basic(&tree, &leaf_indices).unwrap();
-        let leaf_hash = tree
-            .get(tree.leaf_indices()[0].index())
-            .unwrap()
-            .hash
-            .as_slice();
+        let leaf_hash = tree[tree.leaf_indices()[0]].hash().as_slice();
 
         let computed_root = multi_proof.traverse_proof(&multi_proof.paths[0], leaf_hash);
 
