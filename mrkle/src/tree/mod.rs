@@ -9,20 +9,30 @@ use crate::prelude::*;
 
 pub use borrow::TreeView;
 pub use iter::{Fifo, IndexIter, Iter, Lifo, TraversalOrder, ViewIndexIter, ViewIter};
-pub use node::{IndexType, MutNode, Node, NodeIndex};
+pub use node::{DefaultNode, IndexType, MutNode, Node, NodeIndex};
 
 pub(crate) use node::DefaultIx;
 
 /// A generic hierarchical tree data structure.
 ///
-/// It stores a collection of [`Node`] connected in a parent-child
-/// relationship. The tree can be constructed either from the top
-/// down (root first) or bottom up (leaves first).
+/// This structure stores a collection of nodes implementing [`Node<Ix>`] in a [`Vec`],
+/// where hierarchical relationships are maintained through parent and child indices
+/// stored within each node.
 ///
-/// # Type parameters
-/// - `T`: The type of data stored in each node.
-/// - `N`: The node type, which must implement [`Node<T>`].
-/// - `Ix`: The index type used to address nodes in the tree.
+/// The tree structure is not enforced at the data structure level; validation and
+/// enforcement should be handled at the abstraction layer during node insertion.
+///
+/// # Type Parameters
+/// * `N` - The node type, which must implement [`Node<Ix>`]
+/// * `Ix` - The index type used to address nodes in the tree (defaults to [`DefaultIx`])
+///
+/// # Examples
+/// ```
+/// use mrkle::tree::{Tree, DefaultNode};
+///
+/// let mut tree: Tree<DefaultNode<u8>> = Tree::new();
+/// let root = tree.push(DefaultNode::default());
+/// ```
 pub struct Tree<N: Node<Ix>, Ix: IndexType = DefaultIx> {
     /// The index of the root node, if any.
     ///
@@ -72,18 +82,31 @@ impl<N: Node<Ix>, Ix: IndexType> Tree<N, Ix> {
         self.nodes.len()
     }
 
-    /// Returns the total number of nodes the vector can hold without reallocating.
+    /// Returns the total number of nodes the can hold without reallocating.
     #[inline]
     pub fn capacity(&self) -> usize {
         self.nodes.capacity()
     }
 
-    /// Set the root index of the tree
+    /// Unchecked setting of the root index of the tree.
     pub fn set_root(&mut self, root: Option<NodeIndex<Ix>>) {
         self.root = root;
     }
 
-    /// Retrun the starting index.
+    /// Returns the root index of the tree.
+    ///
+    /// # Returns
+    /// * `Some(NodeIndex<Ix>)` - The index of the root node if the tree is non-empty
+    /// * `None` - If the tree is empty or has no designated root
+    ///
+    /// # Examples
+    /// ```
+    /// use mrkle::tree::{Tree, DefaultNode};
+    ///
+    /// let mut tree = Tree::new();
+    /// let _ = tree.push(DefaultNode::<u8>::default());
+    /// assert_eq!(tree.start().unwrap().index(), 0);
+    /// ```
     #[inline]
     pub fn start(&self) -> Option<NodeIndex<Ix>> {
         self.root
@@ -113,12 +136,26 @@ impl<N: Node<Ix>, Ix: IndexType> Tree<N, Ix> {
     /// Attempts to return a reference to the root node.
     ///
     /// # Returns
-    /// - `Ok(&N)` if a root exists.
-    /// - `Err(TreeError::MissingRoot)` if the tree has no root.
+    /// * `Ok(&N)` - A reference to the root node if one exists
+    /// * `Err(TreeError::MissingRoot)` - If the tree has no root node
+    ///
+    /// # Examples
+    /// ```
+    /// use mrkle::tree::{Tree, DefaultNode};
+    ///
+    /// // Empty tree returns an error
+    /// let tree: Tree<DefaultNode<u8>> = Tree::new();
+    /// assert!(tree.try_root().is_err());
+    ///
+    /// // Non-empty tree returns the root
+    /// let mut tree: Tree<DefaultNode<u8>> = Tree::new();
+    /// let _ = tree.push(DefaultNode::default());
+    /// assert!(tree.try_root().is_ok());
+    /// ```
     #[inline]
     pub fn try_root(&self) -> Result<&N, TreeError> {
         if let Some(idx) = self.root {
-            Ok(&self.nodes[idx.index()])
+            Ok(&self[idx])
         } else {
             // NOTE: The only occurance of this would likely happen
             // if programmer had straight access to the Tree data
@@ -138,7 +175,7 @@ impl<N: Node<Ix>, Ix: IndexType> Tree<N, Ix> {
         N: MutNode<Ix>,
     {
         if let Some(idx) = self.root {
-            Ok(&mut self.nodes[idx.index()])
+            Ok(&mut self[idx.index()])
         } else {
             // NOTE: The only occurance of this would likely happen
             // if programmer had straight access to the Tree data
@@ -147,9 +184,16 @@ impl<N: Node<Ix>, Ix: IndexType> Tree<N, Ix> {
         }
     }
 
-    /// Return children Nodes as immutable references of the given index.
+    /// Returns the child nodes of the specified node as immutable references.
+    ///
+    /// # Arguments
+    /// * `index` - The index of the parent node
+    ///
+    /// # Returns
+    /// A vector of references to child nodes. Returns an empty vector if the node
+    /// does not exist or has no children.
     #[inline]
-    pub fn get_children(&self, index: NodeIndex<Ix>) -> Vec<&N> {
+    pub fn get_children(&self, index: Ix) -> Vec<&N> {
         self.get(index.index()).map_or(Vec::new(), |node| {
             node.children()
                 .iter()
@@ -158,15 +202,32 @@ impl<N: Node<Ix>, Ix: IndexType> Tree<N, Ix> {
         })
     }
 
-    /// Return a childen of the indexed node as a vector of [`NodeIndex<Ix>`].
+    /// Returns the child indices of the specified node.
+    ///
+    /// # Arguments
+    /// * `index` - The index of the parent node
+    ///
+    /// # Returns
+    /// A vector of [`NodeIndex<Ix>`] values representing the children. Returns an
+    /// empty vector if the node does not exist or has no children.
     #[inline]
-    pub fn get_children_indices(&self, index: NodeIndex<Ix>) -> Vec<NodeIndex<Ix>> {
+    pub fn get_children_indices(&self, index: Ix) -> Vec<NodeIndex<Ix>> {
         self.get(index.index())
             .map(|node| node.children())
             .unwrap_or_default()
     }
 
-    /// Returns a reference to an element [`Node`] or subslice depending on the type of index.
+    /// Returns a reference to an element or subslice depending on the index type.
+    ///
+    /// # Type Parameters
+    /// * `I` - A type that can index into a slice of nodes
+    ///
+    /// # Arguments
+    /// * `idx` - The index or range to access
+    ///
+    /// # Returns
+    /// * `Some(&I::Output)` - A reference to the requested element(s)
+    /// * `None` - If the index is out of bounds
     #[inline]
     pub fn get<I>(&self, idx: I) -> Option<&I::Output>
     where
@@ -175,34 +236,111 @@ impl<N: Node<Ix>, Ix: IndexType> Tree<N, Ix> {
         self.nodes.get(idx)
     }
 
-    /// Returns a mut reference to an element [`Node`] or subslice depending on the type of index.
+    /// Returns a mutable reference to an element or subslice depending on the index type.
+    ///
+    /// # Type Parameters
+    /// * `I` - A type that can index into a slice of nodes
+    ///
+    /// # Arguments
+    /// * `idx` - The index or range to access
+    ///
+    /// # Returns
+    /// * `Some(&mut I::Output)` - A mutable reference to the requested element(s)
+    /// * `None` - If the index is out of bounds
     #[inline]
     pub fn get_mut<I>(&mut self, idx: I) -> Option<&mut I::Output>
     where
         N: MutNode<Ix>,
-        I: SliceIndex<[N]>,
+        I: SliceIndex<[N]> + IndexType,
     {
         self.nodes.get_mut(idx)
     }
 
-    /// Push nodes onto [`Tree`].
+    /// Pushes a node onto the tree.
     ///
-    /// Already assumes the node connection have been established
-    /// if [`Node`] does not inherit [`MutNode`]
+    /// If the tree is empty and the node is marked as a root node, it will automatically
+    /// be set as the tree's root. For nodes implementing only [`Node`] (not [`MutNode`]),
+    /// all node connections must be established prior to insertion.
     ///
-    /// Return there [`NodeIndex`] within the tree
+    /// # Arguments
+    /// * `node` - The node to insert into the tree
+    ///
+    /// # Returns
+    /// The [`NodeIndex`] of the newly inserted node within the tree
+    ///
+    /// # Panics
+    /// Panics if attempting to push a root node with pre-existing children, as their
+    /// positions in the tree cannot be inferred.
+    ///
+    /// # Examples
+    /// ```
+    /// use mrkle::tree::{Tree, DefaultNode};
+    ///
+    /// let mut tree = Tree::<DefaultNode<u8>>::new();
+    /// let root_idx = tree.push(DefaultNode::default());
+    /// ```
+    #[inline]
     pub fn push(&mut self, node: N) -> NodeIndex<Ix> {
+        // NOTE: Easily allow individuals to insert a
+        // root node within the tree.
+        if self.is_empty() && node.is_root() {
+            assert!(
+                node.child_count() == 0,
+                "Children not allocated to could not infer children's location in the tree."
+            );
+            self.set_root(Some(NodeIndex::new(0)));
+        }
         self.nodes.push(node);
         NodeIndex::new(self.nodes.len() - 1)
     }
 
-    /// Prune [`Node<Ix>`] from tree with [`NodeIndex<Ix>`].
+    /// Clears the vector, removing all values.
+    ///
+    /// Note that this method has no effect on the allocated capacity of the vector.
+    #[inline]
+    fn clear(&mut self) {
+        self.nodes.clear();
+        self.root = None;
+    }
+
+    /// Removes a node and all its descendants from the tree.
+    ///
+    /// This method performs a breadth-first traversal starting from the specified node,
+    /// collecting all descendants, and then removing them from the tree. All remaining
+    /// node indices are adjusted accordingly.
+    ///
+    /// # Arguments
+    /// * `index` - The index of the node to prune
+    ///
+    /// # Returns
+    /// * `Ok(())` - If the operation succeeds
+    /// * `Err(TreeError::IndexOutOfBounds)` - If the index is invalid
+    ///
+    /// # Performance
+    /// The implementation automatically detects whether the nodes to be removed form
+    /// a sequential range and applies an optimized removal strategy when possible.
+    #[inline]
     pub fn prune<I: Into<NodeIndex<Ix>>>(&mut self, index: I) -> Result<(), TreeError>
     where
         N: MutNode<Ix>,
     {
+        // To be able to prune there must exist a root node.
+        if self.root.is_none() {
+            return Err(TreeError::MissingRoot);
+        }
+
+        let index = index.into();
+
+        // Base Case: the index we are pruning is the root
+        // we can just clear the whole buffer, and set the root
+        // to None.
+        if index == self.start().unwrap() {
+            self.clear();
+            return Ok(());
+        }
+
         let mut remove = BTreeSet::new();
-        let mut queue = VecDeque::from([index.into()]);
+        let mut queue = VecDeque::from([index]);
 
         // Get nodes to prune from the tree.
         while let Some(idx) = queue.pop_front() {
@@ -211,25 +349,28 @@ impl<N: Node<Ix>, Ix: IndexType> Tree<N, Ix> {
                 queue.extend(node.children());
             } else {
                 return Err(TreeError::IndexOutOfBounds {
-                    index: idx.into(),
+                    index: idx.index(),
                     len: self.len(),
                 });
             }
         }
 
-        // Convert to sorted indices for analysis
-        let mut indices_to_remove: Vec<usize> = remove.iter().map(|idx| idx.index()).collect();
-        indices_to_remove.sort();
+        // Convert to ordered indices for sequential check.
+        let mut indices = remove.iter().map(|idx| idx.index()).collect::<Vec<usize>>();
+        indices.sort();
 
         // Check if indices are sequential
-        if self.is_sequential(&indices_to_remove) {
-            self.prune_sequential(indices_to_remove)
+        if self.is_sequential(&indices) {
+            self.prune_sequential(indices)
         } else {
             self.prune_non_sequential(remove)
         }
     }
 
-    /// Check if a sorted vector of indices is sequential
+    /// Check if a sorted vector of indices is sequential.
+    ///
+    /// Internal function that allows use to make assumtion on
+    /// prunning a branch from the [`Tree`].
     fn is_sequential(&self, indices: &[usize]) -> bool {
         if indices.is_empty() {
             return true;
@@ -243,7 +384,17 @@ impl<N: Node<Ix>, Ix: IndexType> Tree<N, Ix> {
         true
     }
 
-    /// Optimized removal for sequential indices
+    /// Performs optimized removal for sequential index ranges.
+    ///
+    /// This method avoids unnecessary computation by recognizing that nodes between
+    /// the start and end of the removed range do not require index updates.
+    ///
+    /// # Arguments
+    /// * `indices_to_remove` - A sorted vector of sequential indices to remove
+    ///
+    /// # Returns
+    /// * `Ok(())` - If the operation succeeds
+    /// * `Err(TreeError)` - If a node error occurs during the update process
     fn prune_sequential(&mut self, indices_to_remove: Vec<usize>) -> Result<(), TreeError>
     where
         N: MutNode<Ix>,
@@ -331,7 +482,17 @@ impl<N: Node<Ix>, Ix: IndexType> Tree<N, Ix> {
         Ok(())
     }
 
-    /// General removal for non-sequential indices
+    /// Performs general removal for non-sequential indices.
+    ///
+    /// This method builds a complete index mapping and updates all node references
+    /// before performing the removal operation.
+    ///
+    /// # Arguments
+    /// * `remove` - A set of node indices to remove from the tree
+    ///
+    /// # Returns
+    /// * `Ok(())` - If the operation succeeds
+    /// * `Err(TreeError)` - If a node error occurs during the update process
     fn prune_non_sequential(&mut self, remove: BTreeSet<NodeIndex<Ix>>) -> Result<(), TreeError>
     where
         N: MutNode<Ix>,
@@ -417,7 +578,28 @@ impl<N: Node<Ix>, Ix: IndexType> Tree<N, Ix> {
             .collect()
     }
 
-    ///Return root [`TreeView`] of the [`Tree`]
+    /// Returns a [`Vec`] of mutable references to all leaf nodes in the tree.
+    pub fn leaves_mut(&mut self) -> Vec<&mut N>
+    where
+        N: MutNode<Ix>,
+    {
+        let mut leaves = Vec::new();
+        for node in &mut self.nodes {
+            if node.is_leaf() {
+                leaves.push(node);
+            }
+        }
+        leaves
+    }
+
+    /// Creates a [`TreeView`] from a node reference if found in the tree.
+    ///
+    /// # Arguments
+    /// * `target` - A reference to the node to search for
+    ///
+    /// # Returns
+    /// * `Some(TreeView)` - A view of the subtree rooted at the found node
+    /// * `None` - If the node is not found in the tree
     pub fn view(&self) -> TreeView<'_, N, Ix> {
         TreeView::from(self)
     }
@@ -435,13 +617,13 @@ impl<N: Node<Ix>, Ix: IndexType> Tree<N, Ix> {
             parent
                 .children()
                 .iter()
-                .find(|&&child_idx| self.get(child_idx.index()) == Some(node))
+                .find(|&&idx| &self[idx] == node)
                 .copied()
         } else {
             // Node claims to be a possilbe root, check if it matches the tree root
             self.root
-                .and_then(|root_idx| self.get(root_idx.index()))
-                .filter(|&root_node| root_node == node)
+                .and_then(|idx| self.get(idx.index()))
+                .filter(|&root| root == node)
                 .and(self.root)
         }
     }
@@ -452,8 +634,7 @@ impl<N: Node<Ix>, Ix: IndexType> Tree<N, Ix> {
     where
         F: Fn(&N) -> bool,
     {
-        self.nodes
-            .iter()
+        self.iter()
             .enumerate()
             .find(|(_, node)| predicate(node))
             .map(|(idx, _)| NodeIndex::new(idx))
@@ -465,8 +646,7 @@ impl<N: Node<Ix>, Ix: IndexType> Tree<N, Ix> {
     where
         F: Fn(&N) -> bool,
     {
-        self.nodes
-            .iter()
+        self.iter()
             .enumerate()
             .filter(|(_, node)| predicate(node))
             .map(|(idx, _)| NodeIndex::new(idx))
@@ -510,11 +690,11 @@ impl<N: Node<Ix>, Ix: IndexType> Tree<N, Ix> {
         while let Some(current_idx) = queue.pop_front() {
             let current_node = &self.nodes[current_idx.index()];
 
-            for child_idx in current_node.children() {
-                if child_idx.index() < self.nodes.len() {
-                    let child_node = &self.nodes[child_idx.index()];
-                    nodes.push((child_idx, child_node));
-                    queue.push_back(child_idx);
+            for idx in current_node.children() {
+                if idx.index() < self.nodes.len() {
+                    let child_node = &self[idx];
+                    nodes.push((idx, child_node));
+                    queue.push_back(idx);
                 }
             }
         }
@@ -567,13 +747,13 @@ impl<N: Node<Ix>, Ix: IndexType> core::ops::IndexMut<NodeIndex<Ix>> for Tree<N, 
 }
 
 impl<N: Node<Ix> + Display, Ix: IndexType> Tree<N, Ix> {
-    /// NOTE:
-    /// Power of 10 rules for developing safety-critical code
-    /// [Rule 2](https://en.wikipedia.org/wiki/The_Power_of_10:_Rules_for_Developing_Safety-Critical_Code): All loops must have fixed bounds. This prevents runaway code.
-    /// - In safety-critical systems (like avionics), recursion can lead to unbounded
-    ///   stack growth, making timing and memory usage unpredictable.
-    /// - Static analyzers also have a hard time proving termination and memory bounds for recursive functions.
-    /// - Iterative loops are much easier to analyze, bound, and test for worst-case execution.
+    /// Generates an ASCII art representation of the tree structure.
+    ///
+    /// # Arguments
+    /// * `node` - The node to use as the root of the ASCII tree
+    ///
+    /// # Returns
+    /// A [`text_trees::TreeNode`] structure representing the tree hierarchy
     fn ascii_tree(&self, node: &N) -> text_trees::TreeNode<String> {
         let mut display = text_trees::TreeNode::new(format!("{}", node));
 
@@ -725,8 +905,8 @@ where
 mod test {
 
     use super::node::DefaultNode as Node;
-    use crate::{MutNode, prelude::*};
-    use crate::{NodeIndex, Tree};
+    use crate::prelude::*;
+    use crate::{MutNode, NodeIndex, Tree};
 
     #[test]
     fn test_empty_tree_construction() {
@@ -736,29 +916,36 @@ mod test {
 
     #[test]
     fn test_tree_iter() {
-        let mut root: Node<String> = Node::new("hello".to_string());
-        root.children = vec![NodeIndex::new(1), NodeIndex::new(2)];
-        let mut tree: Tree<Node<String>> = Tree::new();
-        tree.root = Some(NodeIndex::new(0));
-        tree.nodes.push(root);
-        tree.nodes.push(Node::new("world".to_string()));
-        tree.nodes.push(Node::new("!".to_string()));
+        let mut tree: Tree<Node<&str>> = Tree::new();
+
+        let parent = tree.push(Node::new("hello"));
+        let child = tree.push(Node::new_with_parent_index("world", parent));
+        let l1 = tree.push(Node::new_with_parent_index("!", child));
+        let l2 = tree.push(Node::new_with_parent_index("?", child));
+
+        let root = tree.get_mut(parent.index()).unwrap();
+        root.push(child);
+
+        let child = tree.get_mut(parent.index()).unwrap();
+        child.push(l1);
+        child.push(l2);
 
         let mut tree_iter = tree.into_iter();
 
         // Test that we get the root first
         let root_ref = tree_iter.next().unwrap();
-        assert_eq!(root_ref.value, "hello");
+        assert_eq!(root_ref.value(), &"hello");
 
         // Test that we get the children in breadth-first order
-        let child1 = tree_iter.next().unwrap();
-        assert_eq!(child1.value, "world");
+        let child = tree_iter.next().unwrap();
+        assert_eq!(child.value(), &"world");
 
-        let child2 = tree_iter.next().unwrap();
-        assert_eq!(child2.value, "!");
+        let l1 = tree_iter.next().unwrap();
+        assert_eq!(l1.value(), &"!");
 
+        let l2 = tree_iter.next().unwrap();
         // Test that iterator is exhausted
-        assert!(tree_iter.next().is_none());
+        assert_eq!(l2.value(), &"?");
     }
 
     #[test]
@@ -859,31 +1046,23 @@ mod test {
 
     #[test]
     fn test_tree_prune_node_leaf_seq() {
+        // construct tree
         let mut tree: Tree<Node<String>> = Tree::new();
 
-        let mut root: Node<String> = Node::new("hello".to_string());
-        root.children = vec![NodeIndex::new(1), NodeIndex::new(2)];
+        let root = tree.push(Node::new(String::from("hello")));
 
         // construct children
-        let n1 = Node::new("world".to_string());
-        let mut n2 = Node::new("!".to_string());
-        let mut n3: Node<String> = Node::new("!!".to_string());
+        let lhs = tree.push(Node::new_with_parent_index(String::from("world"), root));
+        let rhs = tree.push(Node::new_with_parent_index(String::from("!"), root));
+        let _ = tree.push(Node::new_with_parent_index(String::from("!!"), rhs));
 
-        // push child node into node 2.
-        n2.push(NodeIndex::new(3));
+        let root = tree.root_mut();
 
-        // set root.
-        tree.root = Some(NodeIndex::new(0));
-
-        // push nodes onto tree.
-        tree.push(root);
-        tree.push(n1);
-        let index = tree.push(n2);
-        n3.set_parent(index);
-        tree.push(n3);
+        root.push(lhs);
+        root.push(rhs);
 
         // remove !, and !!
-        tree.prune(index).unwrap();
+        tree.prune(rhs).unwrap();
 
         let expect = ["hello", "world"];
         assert!(
