@@ -1,0 +1,19 @@
+[package]
+name = "pettree"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+homepage.workspace = true
+repository.workspace = true
+keywords.workspace = true
+
+[dependencies]
+thiserror = { workspace = true }
+serde = { workspace = true }
+text_trees = { workspace = true }
+
+[features]
+default = ["std"]
+std = ["thiserror/std"]
+alloc = []
+serde = ["serde/alloc"]
