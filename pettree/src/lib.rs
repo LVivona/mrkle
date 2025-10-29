@@ -1,12 +1,13 @@
 #[path = "view.rs"]
 mod borrow;
+mod builder;
 mod error;
 mod iter;
 mod node;
 
-use error::{NodeError, TreeError};
-
 pub use borrow::TreeView;
+pub use builder::{NodeJoin, TreeBuilder};
+pub use error::{NodeError, TreeBuilderError, TreeError};
 pub use iter::{Fifo, IndexIter, Iter, Lifo, TraversalOrder, ViewIndexIter, ViewIter};
 pub use node::{DefaultNode, IndexType, MutNode, Node, NodeIndex};
 
@@ -204,7 +205,7 @@ impl<N: Node<Ix>, Ix: IndexType> Tree<N, Ix> {
         N: MutNode<Ix>,
     {
         if let Some(idx) = self.root {
-            Ok(&mut self[idx.index()])
+            Ok(&mut self[idx])
         } else {
             // NOTE: The only occurance of this would likely happen
             // if programmer had straight access to the Tree data

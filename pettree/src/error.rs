@@ -30,58 +30,16 @@ pub enum NodeError {
     },
 }
 
-/// Errors that may occur when converting a byte slice into an [`entry`](crate::entry).
-#[derive(Debug, thiserror::Error)]
-pub enum EntryError {
-    /// The given slice has an invalid length for initializing a hash.
-    #[error("Cannot construct hash from digest of length {0}.")]
-    InvalidByteSliceLength(usize),
-}
-
 /// Errors that occur within the builder pattern.
 #[derive(Debug, thiserror::Error)]
 pub enum TreeBuilderError {
-    /// The builder has already been finalized and cannot be modified.
-    ///
-    /// Once a builder is finalized with `finish()`, no further modifications
-    /// are allowed to maintain tree integrity.
-    #[error("Builder has already been finalized and cannot be modified.")]
-    AlreadyFinalized,
+    /// Error occurs when the range exceeds the the buffer.
+    #[error("Tried to access outside the bounds of the buffer.")]
+    InvalidRange,
 
-    /// An invalid operation was attempted on the tree or builder.
-    ///
-    /// This error provides context about what operation failed and why.
-    #[error("Invalid operation '{operation}': {reason}.")]
-    InvalidOperation {
-        /// The name of the operation that failed.
-        operation: &'static str,
-        /// A human-readable description of why the operation failed.
-        reason: String,
-    },
-
-    /// The tree is in an inconsistent state.
-    ///
-    /// This error indicates that the tree's internal state has become
-    /// inconsistent, possibly due to concurrent modification or corruption.
-    #[error("Tree is in an inconsistent state: {details}.")]
-    InconsistentState {
-        /// Details about the inconsistency.
-        details: String,
-    },
-
-    /// A validation error occurred during tree construction or verification.
-    ///
-    /// This error aggregates multiple validation failures that occurred
-    /// during tree validation operations.
-    #[error("Validation failed with {count} error(s): {summary}.")]
-    ValidationFailed {
-        /// The number of validation errors.
-        count: usize,
-        /// A summary of the validation failures.
-        summary: String,
-        /// The individual validation errors.
-        errors: Vec<TreeBuilderError>,
-    },
+    /// Error occurs when there is not enough number of nodes to preform the join.
+    #[error("Insufficent number of nodes to preform a join.")]
+    InsufficientNodes,
 
     /// Errors that may occur when constructing or manipulating a [`Tree`](crate::tree::Tree).
     #[error("{0}")]
