@@ -17,6 +17,7 @@ thiserror = { workspace = true }
 serde = { workspace = true }
 text_trees = { workspace = true }
 hashbrown = { workspace = true }
+pettree = { workspace = true }
 
 
 [dev-dependencies]

@@ -315,6 +315,7 @@ dependencies = [
  "crypto",
  "faster-hex",
  "hashbrown",
+ "pettree",
  "serde",
  "serde_json",
  "sha1",

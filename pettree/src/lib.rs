@@ -1,17 +1,18 @@
 #[path = "view.rs"]
 mod borrow;
 mod builder;
-mod error;
-mod iter;
-mod node;
+
+pub mod error;
+pub mod iter;
+pub mod node;
 
 pub use borrow::TreeView;
 pub use builder::{NodeJoin, TreeBuilder};
-pub use error::{NodeError, TreeBuilderError, TreeError};
-pub use iter::{Fifo, IndexIter, Iter, Lifo, TraversalOrder, ViewIndexIter, ViewIter};
-pub use node::{DefaultNode, IndexType, MutNode, Node, NodeIndex};
 
-pub(crate) use node::DefaultIx;
+pub(crate) use error::{NodeError, TreeBuilderError, TreeError};
+pub(crate) use iter::{IndexIter, Iter};
+
+pub use node::{DefaultIx, IndexType, MutNode, Node, NodeIndex};
 
 #[allow(unused_imports, reason = "future proofing for tree features.")]
 pub(crate) mod prelude {
