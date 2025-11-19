@@ -1,7 +1,7 @@
-import pytest
 import hashlib
-from mrkle import crypto
 
+import pytest
+from mrkle import crypto
 
 # Algorithms that are available in hashlib
 HASHLIB_ALGS = {
@@ -10,6 +10,10 @@ HASHLIB_ALGS = {
     "Sha256": hashlib.sha256,
     "Sha384": hashlib.sha384,
     "Sha512": hashlib.sha512,
+    "Sha3_224": hashlib.sha3_224,
+    "Sha3_256": hashlib.sha3_256,
+    "Sha3_384": hashlib.sha3_384,
+    "Sha3_512": hashlib.sha3_512,
     "Blake2b": hashlib.blake2b,
     "Blake2s": hashlib.blake2s,
 }

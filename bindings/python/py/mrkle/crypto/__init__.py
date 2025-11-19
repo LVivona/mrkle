@@ -9,9 +9,9 @@ functions to create digest objects by name.
 
 from __future__ import annotations
 
-from types import MappingProxyType
 from collections.abc import Mapping, Set
-from typing import Optional, Final
+from types import MappingProxyType
+from typing import Final, Optional
 
 from mrkle._mrkle_rs import crypto
 from mrkle.crypto.typing import Digest
@@ -25,6 +25,10 @@ __all__ = [
     "Sha256",
     "Sha384",
     "Sha512",
+    "Sha3_224",
+    "Sha3_256",
+    "Sha3_384",
+    "Sha3_512",
     "Keccak224",
     "Keccak256",
     "Keccak384",
@@ -36,6 +40,10 @@ __all__ = [
     "sha256",
     "sha384",
     "sha512",
+    "sha3_224",
+    "sha3_256",
+    "sha3_384",
+    "sha3_512",
     "keccak224",
     "keccak256",
     "keccak384",
@@ -55,6 +63,12 @@ Sha224 = crypto.sha224
 Sha256 = crypto.sha256
 Sha384 = crypto.sha384
 Sha512 = crypto.sha512
+
+# SHA-3
+Sha3_224 = crypto.sha3_224
+Sha3_256 = crypto.sha3_256
+Sha3_384 = crypto.sha3_384
+Sha3_512 = crypto.sha3_512
 
 # SHA-3 / Keccak
 Keccak224 = crypto.keccak224
@@ -82,6 +96,10 @@ _algorithms_map: Final[Mapping[str, Digest_T]] = MappingProxyType(
         "sha256": Sha256,
         "sha384": Sha384,
         "sha512": Sha512,
+        "sha3_224": Sha3_224,
+        "sha3_256": Sha3_256,
+        "sha3_384": Sha3_384,
+        "sha3_512": Sha3_512,
     }
 )
 
@@ -121,6 +139,38 @@ def sha384(data: Optional[bytes] = None) -> Digest:
 def sha512(data: Optional[bytes] = None) -> Digest:
     """Create a SHA-512 hash object."""
     digest = _algorithms_map["sha512"]()
+    if data is not None:
+        digest.update(data)
+    return digest
+
+
+def sha3_224(data: Optional[bytes] = None) -> Digest:
+    """Create a SHA3-224 hash object."""
+    digest = _algorithms_map["sha3_224"]()
+    if data is not None:
+        digest.update(data)
+    return digest
+
+
+def sha3_256(data: Optional[bytes] = None) -> Digest:
+    """Create a SHA3-256 hash object."""
+    digest = _algorithms_map["sha3_256"]()
+    if data is not None:
+        digest.update(data)
+    return digest
+
+
+def sha3_384(data: Optional[bytes] = None) -> Digest:
+    """Create a SHA3-384 hash object."""
+    digest = _algorithms_map["sha3_384"]()
+    if data is not None:
+        digest.update(data)
+    return digest
+
+
+def sha3_512(data: Optional[bytes] = None) -> Digest:
+    """Create a SHA3-512 hash object."""
+    digest = _algorithms_map["sha3_512"]()
     if data is not None:
         digest.update(data)
     return digest

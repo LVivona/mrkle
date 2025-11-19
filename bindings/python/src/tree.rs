@@ -22,7 +22,8 @@ use crate::{
     codec::{JsonCodec, MerkleTreeJson, PyCodecFormat},
     crypto::{
         PyBlake2b512Wrapper, PyBlake2s256Wrapper, PyKeccak224Wrapper, PyKeccak256Wrapper,
-        PyKeccak384Wrapper, PyKeccak512Wrapper, PySha1Wrapper, PySha224Wrapper, PySha256Wrapper,
+        PyKeccak384Wrapper, PyKeccak512Wrapper, PySha1Wrapper, PySha3_224Wrapper,
+        PySha3_256Wrapper, PySha3_384Wrapper, PySha3_512Wrapper, PySha224Wrapper, PySha256Wrapper,
         PySha384Wrapper, PySha512Wrapper,
     },
     errors::{NodeError as PyNodeError, SerdeError, TreeError},
@@ -250,6 +251,12 @@ py_mrkle_node!(PyMrkleNode_Sha224, PySha224Wrapper, "MrkleNodeSha224");
 py_mrkle_node!(PyMrkleNode_Sha256, PySha256Wrapper, "MrkleNodeSha256");
 py_mrkle_node!(PyMrkleNode_Sha384, PySha384Wrapper, "MrkleNodeSha384");
 py_mrkle_node!(PyMrkleNode_Sha512, PySha512Wrapper, "MrkleNodeSha512");
+
+py_mrkle_node!(PyMrkleNode_Sha3_224, PySha3_224Wrapper, "MrkleNodeSha3_224");
+py_mrkle_node!(PyMrkleNode_Sha3_256, PySha3_256Wrapper, "MrkleNodeSha3_256");
+py_mrkle_node!(PyMrkleNode_Sha3_384, PySha3_384Wrapper, "MrkleNodeSha3_384");
+py_mrkle_node!(PyMrkleNode_Sha3_512, PySha3_512Wrapper, "MrkleNodeSha3_512");
+
 py_mrkle_node!(PyMrkleNode_Blake2b, PyBlake2b512Wrapper, "MrkleNodeBlake2b");
 py_mrkle_node!(PyMrkleNode_Blake2s, PyBlake2s256Wrapper, "MrkleNodeBlake2s");
 py_mrkle_node!(
@@ -976,6 +983,42 @@ py_mrkle_tree!(
 );
 
 py_mrkle_tree!(
+    PyMrkleTreeSha3_224,
+    PyMrkleTreeIterSha3_224,
+    PyMrkleNode_Sha3_224,
+    PySha3_224Wrapper,
+    "MrkleTreeSha3_224",
+    "MrkleTreeIterSha3_224"
+);
+
+py_mrkle_tree!(
+    PyMrkleTreeSha3_256,
+    PyMrkleTreeIterSha3_256,
+    PyMrkleNode_Sha3_256,
+    PySha3_256Wrapper,
+    "MrkleTreeSha3_256",
+    "MrkleTreeIterSha3_256"
+);
+
+py_mrkle_tree!(
+    PyMrkleTreeSha3_384,
+    PyMrkleTreeIterSha3_384,
+    PyMrkleNode_Sha3_384,
+    PySha3_384Wrapper,
+    "MrkleTreeSha3_384",
+    "MrkleTreeIterSha3_384"
+);
+
+py_mrkle_tree!(
+    PyMrkleTreeSha3_512,
+    PyMrkleTreeIterSha3_512,
+    PyMrkleNode_Sha3_512,
+    PySha3_512Wrapper,
+    "MrkleTreeSha3_512",
+    "MrkleTreeIterSha3_512"
+);
+
+py_mrkle_tree!(
     PyMrkleTreeBlake2b,
     PyMrkleTreeIterBlake2b,
     PyMrkleNode_Blake2b,
@@ -1109,6 +1152,11 @@ pub(crate) fn register_tree(m: &Bound<'_, PyModule>) -> PyResult<()> {
     tree_m.add_class::<PyMrkleNode_Sha384>()?;
     tree_m.add_class::<PyMrkleNode_Sha512>()?;
 
+    tree_m.add_class::<PyMrkleNode_Sha3_224>()?;
+    tree_m.add_class::<PyMrkleNode_Sha3_256>()?;
+    tree_m.add_class::<PyMrkleNode_Sha3_384>()?;
+    tree_m.add_class::<PyMrkleNode_Sha3_512>()?;
+
     tree_m.add_class::<PyMrkleNode_Keccak224>()?;
     tree_m.add_class::<PyMrkleNode_Keccak256>()?;
     tree_m.add_class::<PyMrkleNode_Keccak384>()?;
@@ -1124,6 +1172,11 @@ pub(crate) fn register_tree(m: &Bound<'_, PyModule>) -> PyResult<()> {
     tree_m.add_class::<PyMrkleTreeSha256>()?;
     tree_m.add_class::<PyMrkleTreeSha384>()?;
     tree_m.add_class::<PyMrkleTreeSha512>()?;
+
+    tree_m.add_class::<PyMrkleTreeSha3_224>()?;
+    tree_m.add_class::<PyMrkleTreeSha3_256>()?;
+    tree_m.add_class::<PyMrkleTreeSha3_384>()?;
+    tree_m.add_class::<PyMrkleTreeSha3_512>()?;
 
     tree_m.add_class::<PyMrkleTreeKeccak224>()?;
     tree_m.add_class::<PyMrkleTreeKeccak256>()?;
@@ -1141,6 +1194,11 @@ pub(crate) fn register_tree(m: &Bound<'_, PyModule>) -> PyResult<()> {
     tree_m.add_class::<PyMrkleTreeIterSha256>()?;
     tree_m.add_class::<PyMrkleTreeIterSha384>()?;
     tree_m.add_class::<PyMrkleTreeIterSha512>()?;
+
+    tree_m.add_class::<PyMrkleTreeIterSha3_224>()?;
+    tree_m.add_class::<PyMrkleTreeIterSha3_256>()?;
+    tree_m.add_class::<PyMrkleTreeIterSha3_384>()?;
+    tree_m.add_class::<PyMrkleTreeIterSha3_512>()?;
 
     tree_m.add_class::<PyMrkleTreeIterKeccak224>()?;
     tree_m.add_class::<PyMrkleTreeIterKeccak256>()?;

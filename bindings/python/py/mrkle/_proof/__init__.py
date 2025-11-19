@@ -1,8 +1,8 @@
-from mrkle._mrkle_rs import proof
-
 from collections.abc import Mapping
 from types import MappingProxyType
-from typing import Union, Final
+from typing import Final, Union
+
+from mrkle._mrkle_rs import proof
 
 __all__ = [
     "MrkleProofSha1",
@@ -10,6 +10,10 @@ __all__ = [
     "MrkleProofSha256",
     "MrkleProofSha384",
     "MrkleProofSha512",
+    "MrkleProofSha3_224",
+    "MrkleProofSha3_256",
+    "MrkleProofSha3_384",
+    "MrkleProofSha3_512",
     "MrkleProofKeccak224",
     "MrkleProofKeccak256",
     "MrkleProofKeccak384",
@@ -27,6 +31,10 @@ MrkleProofSha256 = proof.MrkleProofSha256
 MrkleProofSha384 = proof.MrkleProofSha384
 MrkleProofSha512 = proof.MrkleProofSha512
 
+MrkleProofSha3_224 = proof.MrkleProofSha3_224
+MrkleProofSha3_256 = proof.MrkleProofSha3_256
+MrkleProofSha3_384 = proof.MrkleProofSha3_384
+MrkleProofSha3_512 = proof.MrkleProofSha3_512
 
 MrkleProofKeccak224 = proof.MrkleProofKeccak224
 MrkleProofKeccak256 = proof.MrkleProofKeccak256
@@ -50,6 +58,10 @@ Proof_T = type[
         MrkleProofSha256,
         MrkleProofSha384,
         MrkleProofSha512,
+        MrkleProofSha3_224,
+        MrkleProofSha3_256,
+        MrkleProofSha3_384,
+        MrkleProofSha3_512,
     ]
 ]
 
@@ -68,5 +80,9 @@ PROOF_MAP: Final[Mapping[str, Proof_T]] = MappingProxyType(
         "sha256": MrkleProofSha256,
         "sha384": MrkleProofSha384,
         "sha512": MrkleProofSha512,
+        "sha3_224": MrkleProofSha224,
+        "sha3_256": MrkleProofSha256,
+        "sha3_384": MrkleProofSha384,
+        "sha3_512": MrkleProofSha512,
     }
 )
