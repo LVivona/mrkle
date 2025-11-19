@@ -1,10 +1,10 @@
 """Merkle tree implementations for various hash algorithms."""
 
 from __future__ import annotations
-from types import MappingProxyType
-from typing import Final, Union
 
 from collections.abc import Mapping
+from types import MappingProxyType
+from typing import Final, Union
 
 from mrkle._mrkle_rs import tree
 
@@ -50,6 +50,10 @@ MrkleTreeSha224 = tree.MrkleTreeSha224
 MrkleTreeSha256 = tree.MrkleTreeSha256
 MrkleTreeSha384 = tree.MrkleTreeSha384
 MrkleTreeSha512 = tree.MrkleTreeSha512
+MrkleTreeSha3_224 = tree.MrkleTreeSha3_224
+MrkleTreeSha3_256 = tree.MrkleTreeSha3_256
+MrkleTreeSha3_384 = tree.MrkleTreeSha3_384
+MrkleTreeSha3_512 = tree.MrkleTreeSha3_512
 
 MrkleNodeBlake2s = tree.MrkleNodeBlake2s
 MrkleNodeBlake2b = tree.MrkleNodeBlake2b
@@ -62,6 +66,10 @@ MrkleNodeSha224 = tree.MrkleNodeSha224
 MrkleNodeSha256 = tree.MrkleNodeSha256
 MrkleNodeSha384 = tree.MrkleNodeSha384
 MrkleNodeSha512 = tree.MrkleNodeSha512
+MrkleNodeSha3_224 = tree.MrkleNodeSha3_224
+MrkleNodeSha3_256 = tree.MrkleNodeSha3_256
+MrkleNodeSha3_384 = tree.MrkleNodeSha3_384
+MrkleNodeSha3_512 = tree.MrkleNodeSha3_512
 
 # Re-export all iterator types
 MrkleTreeIterBlake2s = tree.MrkleTreeIterBlake2s
@@ -75,6 +83,10 @@ MrkleTreeIterSha224 = tree.MrkleTreeIterSha224
 MrkleTreeIterSha256 = tree.MrkleTreeIterSha256
 MrkleTreeIterSha384 = tree.MrkleTreeIterSha384
 MrkleTreeIterSha512 = tree.MrkleTreeIterSha512
+MrkleTreeIterSha3_224 = tree.MrkleTreeIterSha3_224
+MrkleTreeIterSha3_256 = tree.MrkleTreeIterSha3_256
+MrkleTreeIterSha3_384 = tree.MrkleTreeIterSha3_384
+MrkleTreeIterSha3_512 = tree.MrkleTreeIterSha3_512
 
 Node_T = type[
     Union[
@@ -89,6 +101,10 @@ Node_T = type[
         MrkleNodeSha256,
         MrkleNodeSha384,
         MrkleNodeSha512,
+        MrkleNodeSha3_224,
+        MrkleNodeSha3_256,
+        MrkleNodeSha3_384,
+        MrkleNodeSha3_512,
     ]
 ]
 
@@ -105,6 +121,10 @@ Tree_T = type[
         MrkleTreeSha256,
         MrkleTreeSha384,
         MrkleTreeSha512,
+        MrkleTreeSha3_224,
+        MrkleTreeSha3_256,
+        MrkleTreeSha3_384,
+        MrkleTreeSha3_512,
     ]
 ]
 
@@ -121,6 +141,10 @@ Iterable_T = type[
         MrkleTreeIterSha256,
         MrkleTreeIterSha384,
         MrkleTreeIterSha512,
+        MrkleTreeIterSha3_224,
+        MrkleTreeIterSha3_256,
+        MrkleTreeIterSha3_384,
+        MrkleTreeIterSha3_512,
     ]
 ]
 
@@ -140,6 +164,10 @@ TREE_MAP: Final[Mapping[str, Tree_T]] = MappingProxyType(
         "sha256": MrkleTreeSha256,
         "sha384": MrkleTreeSha384,
         "sha512": MrkleTreeSha512,
+        "sha3_224": MrkleTreeSha3_224,
+        "sha3_256": MrkleTreeSha3_256,
+        "sha3_384": MrkleTreeSha3_384,
+        "sha3_512": MrkleTreeSha3_512,
     }
 )
 
@@ -159,5 +187,9 @@ NODE_MAP: Final[Mapping[str, Node_T]] = MappingProxyType(
         "sha256": MrkleNodeSha256,
         "sha384": MrkleNodeSha384,
         "sha512": MrkleNodeSha512,
+        "sha3_224": MrkleNodeSha3_224,
+        "sha3_256": MrkleNodeSha3_256,
+        "sha3_384": MrkleNodeSha3_384,
+        "sha3_512": MrkleNodeSha3_512,
     }
 )
