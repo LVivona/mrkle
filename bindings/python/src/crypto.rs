@@ -7,7 +7,7 @@ use pyo3::types::{PyAny, PyBytes};
 use pyo3::{Bound as PyBound, Py};
 use sha1::Sha1;
 use sha2::{Sha224, Sha256, Sha384, Sha512};
-use sha3::{Keccak224, Keccak256, Keccak384, Keccak512};
+use sha3::{Keccak224, Keccak256, Keccak384, Keccak512, Sha3_224, Sha3_256, Sha3_384, Sha3_512};
 
 /// Trait for Python-exposed digest algorithms
 pub trait PyDigest: Sized + Clone + Send + Sync {
@@ -318,6 +318,35 @@ py_digest!(
     64
 );
 
+py_digest!(
+    "sha3_224",
+    PySha3_224Wrapper,
+    Sha3_224,
+    crypto::digest::consts::U28,
+    28
+);
+py_digest!(
+    "sha3_256",
+    PySha3_256Wrapper,
+    Sha3_256,
+    crypto::digest::consts::U32,
+    32
+);
+py_digest!(
+    "sha3_384",
+    PySha3_384Wrapper,
+    Sha3_384,
+    crypto::digest::consts::U48,
+    48
+);
+py_digest!(
+    "sha3_512",
+    PySha3_512Wrapper,
+    Sha3_512,
+    crypto::digest::consts::U64,
+    64
+);
+
 // SHA-3/Keccak family
 py_digest!(
     "keccak224",
@@ -369,6 +398,7 @@ py_digest!(
 pub(crate) fn register_crypto(m: &Bound<'_, PyModule>) -> PyResult<()> {
     let exce_m = PyModule::new(m.py(), "crypto")?;
 
+    // sha1
     exce_m.add_class::<PySha1Wrapper>()?;
 
     // sha2
@@ -376,6 +406,12 @@ pub(crate) fn register_crypto(m: &Bound<'_, PyModule>) -> PyResult<()> {
     exce_m.add_class::<PySha256Wrapper>()?;
     exce_m.add_class::<PySha384Wrapper>()?;
     exce_m.add_class::<PySha512Wrapper>()?;
+
+    // sha3
+    exce_m.add_class::<PySha3_224Wrapper>()?;
+    exce_m.add_class::<PySha3_256Wrapper>()?;
+    exce_m.add_class::<PySha3_384Wrapper>()?;
+    exce_m.add_class::<PySha3_512Wrapper>()?;
 
     exce_m.add_class::<PyKeccak224Wrapper>()?;
     exce_m.add_class::<PyKeccak256Wrapper>()?;

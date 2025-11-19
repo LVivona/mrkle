@@ -9,9 +9,10 @@ functions to create digest objects by name.
 
 from __future__ import annotations
 
-from typing import Optional
-from typing_extensions import override
 from collections.abc import Set
+from typing import Optional
+
+from typing_extensions import override
 
 from mrkle.crypto.typing import Digest
 
@@ -341,6 +342,18 @@ def sha384(data: Optional[bytes] = None) -> Digest:
 
 def sha512(data: Optional[bytes] = None) -> Digest:
     """Create a SHA-512 hash object."""
+    ...
+
+def sha3_256(data: Optional[bytes] = None) -> Digest:
+    """Create a SHA3-256 hash object."""
+    ...
+
+def sha3_384(data: Optional[bytes] = None) -> Digest:
+    """Create a SHA3-384 hash object."""
+    ...
+
+def sha3_512(data: Optional[bytes] = None) -> Digest:
+    """Create a SHA3-512 hash object."""
     ...
 
 def keccak224(data: Optional[bytes] = None) -> Digest:
