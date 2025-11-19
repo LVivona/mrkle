@@ -14,16 +14,19 @@ use crate::{
     MRKLE_MODULE,
     crypto::{
         PyBlake2b512Wrapper, PyBlake2s256Wrapper, PyKeccak224Wrapper, PyKeccak256Wrapper,
-        PyKeccak384Wrapper, PyKeccak512Wrapper, PySha1Wrapper, PySha224Wrapper, PySha256Wrapper,
+        PyKeccak384Wrapper, PyKeccak512Wrapper, PySha1Wrapper, PySha3_224Wrapper,
+        PySha3_256Wrapper, PySha3_384Wrapper, PySha3_512Wrapper, PySha224Wrapper, PySha256Wrapper,
         PySha384Wrapper, PySha512Wrapper,
     },
     errors::{ProofError as PyProofError, TreeError as PyTreeError},
     tree::{
         PyMrkleNode_Blake2b, PyMrkleNode_Blake2s, PyMrkleNode_Keccak224, PyMrkleNode_Keccak256,
-        PyMrkleNode_Keccak384, PyMrkleNode_Keccak512, PyMrkleNode_Sha1, PyMrkleNode_Sha224,
+        PyMrkleNode_Keccak384, PyMrkleNode_Keccak512, PyMrkleNode_Sha1, PyMrkleNode_Sha3_224,
+        PyMrkleNode_Sha3_256, PyMrkleNode_Sha3_384, PyMrkleNode_Sha3_512, PyMrkleNode_Sha224,
         PyMrkleNode_Sha256, PyMrkleNode_Sha384, PyMrkleNode_Sha512, PyMrkleTreeBlake2b,
         PyMrkleTreeBlake2s, PyMrkleTreeKeccak224, PyMrkleTreeKeccak256, PyMrkleTreeKeccak384,
-        PyMrkleTreeKeccak512, PyMrkleTreeSha1, PyMrkleTreeSha224, PyMrkleTreeSha256,
+        PyMrkleTreeKeccak512, PyMrkleTreeSha1, PyMrkleTreeSha3_224, PyMrkleTreeSha3_256,
+        PyMrkleTreeSha3_384, PyMrkleTreeSha3_512, PyMrkleTreeSha224, PyMrkleTreeSha256,
         PyMrkleTreeSha384, PyMrkleTreeSha512,
     },
 };
@@ -346,6 +349,38 @@ py_mrkle_proof!(
 );
 
 py_mrkle_proof!(
+    PyMrkleProofSha3_224,
+    PySha3_224Wrapper,
+    PyMrkleTreeSha3_224,
+    PyMrkleNode_Sha3_224,
+    "MrkleProofSha3_224"
+);
+
+py_mrkle_proof!(
+    PyMrkleProofSha3_256,
+    PySha3_256Wrapper,
+    PyMrkleTreeSha3_256,
+    PyMrkleNode_Sha3_256,
+    "MrkleProofSha3_256"
+);
+
+py_mrkle_proof!(
+    PyMrkleProofSha3_384,
+    PySha3_384Wrapper,
+    PyMrkleTreeSha3_384,
+    PyMrkleNode_Sha3_384,
+    "MrkleProofSha3_384"
+);
+
+py_mrkle_proof!(
+    PyMrkleProofSha3_512,
+    PySha3_512Wrapper,
+    PyMrkleTreeSha3_512,
+    PyMrkleNode_Sha3_512,
+    "MrkleProofSha3_512"
+);
+
+py_mrkle_proof!(
     PyMrkleProofBlake2b,
     PyBlake2b512Wrapper,
     PyMrkleTreeBlake2b,
@@ -413,6 +448,11 @@ pub(crate) fn register_proof(m: &PyBound<'_, PyModule>) -> PyResult<()> {
     proof_m.add_class::<PyMrkleProofSha256>()?;
     proof_m.add_class::<PyMrkleProofSha384>()?;
     proof_m.add_class::<PyMrkleProofSha512>()?;
+
+    proof_m.add_class::<PyMrkleProofSha3_224>()?;
+    proof_m.add_class::<PyMrkleProofSha3_256>()?;
+    proof_m.add_class::<PyMrkleProofSha3_384>()?;
+    proof_m.add_class::<PyMrkleProofSha3_512>()?;
 
     proof_m.add_class::<PyMrkleProofKeccak224>()?;
     proof_m.add_class::<PyMrkleProofKeccak256>()?;

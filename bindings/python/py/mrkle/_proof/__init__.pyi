@@ -1,11 +1,11 @@
 from collections.abc import Mapping, Sequence
-from typing import Union, Final
-from mrkle.node import MrkleNode
+from typing import Final, Union
+
 from typing_extensions import TypeAlias, override
 
-from mrkle.tree import MrkleTree
-
 from mrkle.crypto.typing import Digest
+from mrkle.node import MrkleNode
+from mrkle.tree import MrkleTree
 
 __all__ = [
     "MrkleProofSha1",
@@ -13,6 +13,10 @@ __all__ = [
     "MrkleProofSha256",
     "MrkleProofSha384",
     "MrkleProofSha512",
+    "MrkleProofSha3_224",
+    "MrkleProofSha3_256",
+    "MrkleProofSha3_384",
+    "MrkleProofSha3_512",
     "MrkleProofKeccak224",
     "MrkleProofKeccak256",
     "MrkleProofKeccak384",
@@ -59,6 +63,10 @@ class MrkleProofSha224(BaseMrkleProof): ...
 class MrkleProofSha256(BaseMrkleProof): ...
 class MrkleProofSha384(BaseMrkleProof): ...
 class MrkleProofSha512(BaseMrkleProof): ...
+class MrkleProofSha3_224(BaseMrkleProof): ...
+class MrkleProofSha3_256(BaseMrkleProof): ...
+class MrkleProofSha3_384(BaseMrkleProof): ...
+class MrkleProofSha3_512(BaseMrkleProof): ...
 class MrkleProofKeccak224(BaseMrkleProof): ...
 class MrkleProofKeccak256(BaseMrkleProof): ...
 class MrkleProofKeccak384(BaseMrkleProof): ...
@@ -78,6 +86,10 @@ Proof_T: TypeAlias = Union[
     MrkleProofSha256,
     MrkleProofSha384,
     MrkleProofSha512,
+    MrkleProofSha3_224,
+    MrkleProofSha3_256,
+    MrkleProofSha3_384,
+    MrkleProofSha3_512,
 ]
 
 PROOF_MAP: Final[Mapping[str, Proof_T]]
