@@ -49,7 +49,7 @@ where
 ///
 /// # Examples
 /// ```
-/// use pettree::{TreeBuilder, DefaultNode as Node};
+/// use mrkle_tree::{TreeBuilder, DefaultNode as Node};
 ///
 /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
 /// let tree = TreeBuilder::<Node<u8>>::new()
@@ -117,7 +117,7 @@ impl<N: NodeJoin<Ix>, Ix: IndexType> TreeBuilder<N, Ix> {
     ///
     /// # Example
     /// ```
-    /// use pettree::{TreeBuilder, DefaultNode as Node};
+    /// use mrkle_tree::{TreeBuilder, DefaultNode as Node};
     ///
     ///# fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// let tree = TreeBuilder::<Node<u8>>::new()

@@ -9,9 +9,9 @@ functions to create digest objects by name.
 
 from __future__ import annotations
 
-from types import MappingProxyType
 from collections.abc import Mapping, Set
-from typing import Optional, Final
+from types import MappingProxyType
+from typing import Final, Optional
 
 from mrkle._mrkle_rs import crypto
 from mrkle.crypto.typing import Digest

@@ -1,9 +1,9 @@
 [workspace]
 resolver = "3"
 members = [
-  "mrkle",
+  "crates/mrkle",
   "bindings/python"
-, "pettree"]
+, "crates/mrkle_tree", "crates/mrkle_core"]
 
 [workspace.package]
 version = "0.0.1-rc-0"
@@ -14,7 +14,7 @@ repository = "https://github.com/LVivona/mrkle"
 keywords = ["hash", "merkle", "proof", "tree"]
 
 [workspace.dependencies]
-pettree = { path = "./pettree" }
+mrkle_tree = { path = "./crates/mrkle_tree" }
 thiserror = { version = "2.0.12", default-features = false }
 
 serde = { version = "1.0.219", default-features = false, features = ["derive"] }

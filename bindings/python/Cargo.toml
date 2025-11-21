@@ -9,7 +9,7 @@ name = "mrkle_rs"
 crate-type = ["cdylib"]
 
 [dependencies]
-mrkle = { path = "../../mrkle", default-features = false, features = ["std", "serde"] }
+mrkle = { path = "../../crates/mrkle", default-features = false, features = ["std", "serde"] }
 
 serde = { workspace = true }
 serde_json = { workspace = true }

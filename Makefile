@@ -1,6 +1,7 @@
 ROOT_DIR := $(shell pwd)
-CARGO_DIR := $(ROOT_DIR)/mrkle
-CARGO_TARGET_DIR := $(CARGO_DIR)/docs
+CREATE_DIR := $(ROOT_DIR)/crates
+CARGO_DIR := $(CREATE_DIR)/mrkle
+CARGO_TARGET_DIR := $(CREATE_DIR)/docs
 CARGO_KATEX_HEADER := $(CARGO_TARGET_DIR)/katex.html
 
 PYTHON_DIR := $(ROOT_DIR)/bindings/python

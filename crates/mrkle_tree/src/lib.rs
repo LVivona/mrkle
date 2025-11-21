@@ -12,7 +12,7 @@ pub use builder::{NodeJoin, TreeBuilder};
 pub(crate) use error::{NodeError, TreeBuilderError, TreeError};
 pub(crate) use iter::{IndexIter, Iter};
 
-pub use node::{DefaultIx, IndexType, MutNode, Node, NodeIndex};
+pub use node::{DefaultIx, DefaultNode, IndexType, MutNode, Node, NodeIndex};
 
 #[allow(unused_imports, reason = "future proofing for tree features.")]
 pub(crate) mod prelude {
@@ -59,7 +59,7 @@ use prelude::*;
 ///
 /// # Examples
 /// ```
-/// use pettree::{Tree, DefaultNode};
+/// use mrkle_tree::{Tree, DefaultNode};
 ///
 /// let mut tree: Tree<DefaultNode<u8>> = Tree::new();
 /// let root = tree.push(DefaultNode::default());
@@ -132,7 +132,7 @@ impl<N: Node<Ix>, Ix: IndexType> Tree<N, Ix> {
     ///
     /// # Examples
     /// ```
-    /// use pettree::{Tree, DefaultNode};
+    /// use mrkle_tree::{Tree, DefaultNode};
     ///
     /// let mut tree = Tree::new();
     /// let _ = tree.push(DefaultNode::<u8>::default());
@@ -172,7 +172,7 @@ impl<N: Node<Ix>, Ix: IndexType> Tree<N, Ix> {
     ///
     /// # Examples
     /// ```
-    /// use pettree::{Tree, DefaultNode};
+    /// use mrkle_tree::{Tree, DefaultNode};
     ///
     /// // Empty tree returns an error
     /// let tree: Tree<DefaultNode<u8>> = Tree::new();
@@ -305,7 +305,7 @@ impl<N: Node<Ix>, Ix: IndexType> Tree<N, Ix> {
     ///
     /// # Examples
     /// ```
-    /// use pettree::{Tree, DefaultNode};
+    /// use mrkle_tree::{Tree, DefaultNode};
     ///
     /// let mut tree = Tree::<DefaultNode<u8>>::new();
     /// let root_idx = tree.push(DefaultNode::default());
